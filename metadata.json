@@ -1,0 +1,7 @@
+{
+  "name": "Destiny Match",
+  "description": "An AI-powered partner matching discovery app that analyzes your portrait to foresee your future partner and romantic destiny through the lens of artificial intelligence.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
