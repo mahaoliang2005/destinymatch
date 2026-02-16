@@ -10,8 +10,6 @@ import {
     isMobile,
     generateShareText,
     getShareUrl,
-    convertImageToBase64,
-    convertImageViaCanvas,
 } from '../services/share';
 
 interface ResultProps {
@@ -53,32 +51,33 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
         generateQR();
     }, []);
 
-    // Convert images to base64 for share card (to avoid CORS issues)
+    // Fetch partner image from URL and convert to base64 for share card compatibility
     useEffect(() => {
-        const convertImages = async () => {
-            // Convert user image if it's a URL
-            if (userImage && !userImage.startsWith('data:')) {
-                const userBase64 = await convertImageToBase64(userImage);
-                if (userBase64) setUserImageBase64(userBase64);
-            }
-
-            // Convert partner image if it's an external URL
-            if (result.partnerImageBase64) {
-                if (result.partnerImageBase64.startsWith('http')) {
-                    // Try fetch first, then canvas method as fallback
-                    let partnerBase64 = await convertImageToBase64(result.partnerImageBase64);
-                    if (!partnerBase64) {
-                        partnerBase64 = await convertImageViaCanvas(result.partnerImageBase64);
-                    }
-                    if (partnerBase64) setPartnerImageBase64(partnerBase64);
-                    else setPartnerImageBase64(result.partnerImageBase64); // Fallback to original
-                } else {
-                    setPartnerImageBase64(result.partnerImageBase64);
+        const fetchPartnerImage = async () => {
+            if (result.partnerImageUrl) {
+                try {
+                    // Fetch the image from the server URL and convert to base64
+                    const response = await fetch(result.partnerImageUrl);
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setPartnerImageBase64(reader.result as string);
+                    };
+                    reader.readAsDataURL(blob);
+                } catch (error) {
+                    console.error('Failed to fetch partner image:', error);
+                    // Fallback to URL if fetch fails
+                    setPartnerImageBase64(result.partnerImageUrl);
                 }
             }
         };
-        convertImages();
-    }, [userImage, result.partnerImageBase64]);
+
+        fetchPartnerImage();
+
+        if (userImage) {
+            setUserImageBase64(userImage);
+        }
+    }, [userImage, result.partnerImageUrl]);
 
     // Show toast message
     const showToastMessage = useCallback((message: string) => {
@@ -92,12 +91,6 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
         if (!cardRef.current) {
             console.error('Card ref not found');
             showToastMessage('生成失败：找不到卡片元素');
-            return;
-        }
-
-        // Check if images are still being converted
-        if (result.partnerImageBase64?.startsWith('http') && !partnerImageBase64) {
-            showToastMessage('图片准备中，请稍候...');
             return;
         }
 
@@ -148,7 +141,7 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
                         <div className="absolute inset-0 border border-primary/20 rounded-full scale-105 transform translate-y-4"></div>
                         <div className="relative w-full max-w-md aspect-[4/5] rounded-[3rem] overflow-hidden shadow-2xl shadow-primary/20 border-4 border-surface-dark ring-2 ring-primary/30">
                             <img
-                                src={showUserPhoto ? (userImageBase64 || userImage) : (partnerImageBase64 || result.partnerImageBase64 || userImage)}
+                                src={showUserPhoto ? (userImageBase64 || userImage) : (result.partnerImageUrl || partnerImageBase64 || userImage)}
                                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                                 alt={showUserPhoto ? "你的照片" : "未来伴侣"}
                             />
@@ -159,7 +152,7 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
                             <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background-dark/90 to-transparent"></div>
 
                             {/* 照片切换按钮 */}
-                            {result.partnerImageBase64 && (
+                            {result.partnerImageUrl && (
                                 <button
                                     onClick={() => setShowUserPhoto(!showUserPhoto)}
                                     className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-md hover:bg-black/70 text-white px-3 py-2 rounded-full text-xs font-medium border border-white/20 flex items-center gap-1.5 transition-colors"
@@ -266,7 +259,7 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
                                     <span className="text-2xl text-primary">+</span>
                                     <div className="relative w-16 h-16">
                                         <img
-                                            src={partnerImageBase64 || result.partnerImageBase64 || userImage}
+                                            src={partnerImageBase64 || result.partnerImageUrl || userImage}
                                             className="w-full h-full object-cover rounded-full border-2 border-primary"
                                             alt="Partner"
                                         />
@@ -355,7 +348,7 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
                     <span className="text-2xl text-primary font-light">+</span>
                     <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-primary bg-[#2D1A20]">
                         <img
-                            src={partnerImageBase64 || result.partnerImageBase64 || userImage}
+                            src={partnerImageBase64 || result.partnerImageUrl || userImage}
                             className="w-full h-full object-cover"
                             alt="Partner"
                             crossOrigin="anonymous"

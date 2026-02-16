@@ -1,24 +1,20 @@
 import { toPng, toCanvas } from 'html-to-image';
 import QRCode from 'qrcode';
-import { AnalysisResult, PartnerVibe } from '../types';
+import { PartnerVibe } from '../types';
 
 // Wait for all images in element to load
+// Note: Images are now base64 from backend, so they load instantly
 const waitForImages = (element: HTMLElement): Promise<void> => {
   const images = element.querySelectorAll('img');
   const promises = Array.from(images).map((img) => {
     if (img.complete) return Promise.resolve();
     return new Promise<void>((resolve) => {
       img.onload = () => resolve();
-      // Don't reject on error - just continue with placeholder
       img.onerror = () => {
         console.warn(`[Share] Image failed to load: ${img.src.substring(0, 50)}...`);
         resolve();
       };
-      // Timeout after 3 seconds - don't block generation
-      setTimeout(() => {
-        console.warn('[Share] Image load timeout, continuing...');
-        resolve();
-      }, 3000);
+      setTimeout(() => resolve(), 1000);
     });
   });
   return Promise.all(promises).then(() => {});
@@ -169,109 +165,4 @@ export const getShareUrl = (): string => {
     return window.location.origin + window.location.pathname;
   }
   return 'https://destiny-match.app';
-};
-
-// Convert image URL to base64
-export const convertImageToBase64 = async (imageUrl: string): Promise<string | null> => {
-  try {
-    // If already base64, return as-is
-    if (imageUrl.startsWith('data:')) {
-      return imageUrl;
-    }
-
-    // Try to fetch the image
-    const response = await fetch(imageUrl, {
-      method: 'GET',
-      mode: 'cors',
-      cache: 'no-cache',
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const blob = await response.blob();
-    return await blobToBase64(blob);
-  } catch (error) {
-    console.warn('[Share] Failed to convert image to base64:', error);
-    return null;
-  }
-};
-
-// Helper to convert blob to base64
-const blobToBase64 = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
-
-// Convert image URL to base64 using canvas (bypasses fetch CORS for images with crossOrigin support)
-export const convertImageViaCanvas = async (imageUrl: string): Promise<string | null> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth || 300;
-        canvas.height = img.naturalHeight || 300;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          const dataUrl = canvas.toDataURL('image/png');
-          resolve(dataUrl);
-        } else {
-          resolve(null);
-        }
-      } catch (e) {
-        console.warn('[Share] Canvas conversion failed:', e);
-        resolve(null);
-      }
-    };
-
-    img.onerror = () => {
-      resolve(null);
-    };
-
-    img.src = imageUrl;
-  });
-};
-
-// Preload image and convert to base64 for share card
-export const preloadImageForSharing = async (src: string): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      // Create canvas to convert to base64
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || 300;
-      canvas.height = img.naturalHeight || 300;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        try {
-          const dataUrl = canvas.toDataURL('image/png');
-          resolve(dataUrl);
-        } catch (e) {
-          console.warn('[Share] Canvas conversion failed:', e);
-          resolve(src);
-        }
-      } else {
-        resolve(src);
-      }
-    };
-
-    img.onerror = () => {
-      console.warn('[Share] Image preload failed:', src.substring(0, 50));
-      resolve(src);
-    };
-
-    img.src = src;
-  });
 };

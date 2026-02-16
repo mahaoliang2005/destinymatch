@@ -48,7 +48,7 @@ const Records: React.FC<RecordsProps> = ({ history, onBack }) => {
               <div key={record.id} className="group relative rounded-lg overflow-hidden bg-surface-dark border border-white/5 transition-all duration-500 hover:-translate-y-1">
                 <div className="aspect-[3/4] relative overflow-hidden">
                   <img
-                    src={record.partnerImageBase64 || record.userImageBase64}
+                    src={record.partnerImageUrl || record.userImageUrl}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     alt="生成的伴侣"
                   />

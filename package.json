@@ -1,25 +1,26 @@
 {
   "name": "destiny-match",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
+  "description": "Destiny Match - AI Powered Romance Discovery",
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "html-to-image": "^1.11.13",
-    "openai": "^4.77.0",
-    "qrcode": "^1.5.4",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" --names \"SERVER,CLIENT\" --prefix-colors \"cyan,green\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "start": "cd server && npm start"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@types/qrcode": "^1.5.6",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

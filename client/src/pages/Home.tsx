@@ -22,14 +22,15 @@ const Home: React.FC<HomeProps> = ({ onStart, onGoToRecords }) => {
           </div>
           <span className="font-bold text-lg tracking-tight">Destiny Match</span>
         </div>
-        <div className="hidden md:flex items-center gap-4">
-          <button
-            onClick={onGoToRecords}
-            className="px-5 py-2 rounded-full text-sm font-medium border border-primary/30 text-primary hover:bg-primary hover:text-white transition-all duration-300"
-          >
-            Destiny Records
-          </button>
-        </div>
+        <button
+          onClick={onGoToRecords}
+          className="flex items-center justify-center w-10 h-10 md:w-auto md:h-auto md:px-5 md:py-2 rounded-full text-sm font-medium border border-primary/30 text-primary hover:bg-primary hover:text-white transition-all duration-300"
+          aria-label="Destiny Records"
+        >
+          {/* Mobile: icon / Desktop: text */}
+          <span className="material-icons text-lg md:hidden">history</span>
+          <span className="hidden md:inline">Destiny Records</span>
+        </button>
       </nav>
 
       {/* Main Content */}

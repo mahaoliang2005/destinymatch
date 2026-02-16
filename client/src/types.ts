@@ -8,14 +8,14 @@ export interface AnalysisResult {
   communicationStyle: string;
   coreValues: string;
   partnerType: string;
-  partnerImageBase64?: string;
+  partnerImageUrl?: string;
 }
 
 export interface HistoryRecord extends AnalysisResult {
   id: string;
   timestamp: number;
   userName: string;
-  userImageBase64: string;
+  userImageUrl: string;
   vibe: PartnerVibe;
 }
 
@@ -27,5 +27,6 @@ export enum AppStep {
   LOADING,
   RESULT,
   RECORDS,
-  ERROR
+  ERROR,
+  RATE_LIMIT
 }

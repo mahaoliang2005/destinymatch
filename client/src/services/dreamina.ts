@@ -28,9 +28,9 @@ const mockPartnerImages: Record<PartnerVibe, string> = {
  * 风格提示词映射
  */
 const vibePrompts: Record<PartnerVibe, string> = {
-    gentle: '温柔气质，自然微笑，柔和眼神，亲和力强，自然光生活照，真实自然',
+    gentle: '自然微笑，柔和眼神，亲和力强，自然光生活照，真实自然',
     sunny: '阳光活力，开朗笑容，健康自然，邻家感，户外自然光，生活照风格',
-    intellectual: '知性沉稳，自然神态，文艺气质，书卷感，日常场景，真实生活照',
+    intellectual: '自然神态，日常场景，真实生活照',
     mysterious: '独特气质，神秘眼神，艺术气息，个性风格，自然光影，真实生活照'
 };
 
