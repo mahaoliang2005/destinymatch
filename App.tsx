@@ -96,7 +96,11 @@ const App: React.FC = () => {
             userImage={userImage}
             onConfirm={() => {
               if (userImage) {
-                runAnalysis(selectedVibe);
+                // 随机选择一种伴侣风格
+                const vibes: PartnerVibe[] = ['gentle', 'sunny', 'intellectual', 'mysterious'];
+                const randomVibe = vibes[Math.floor(Math.random() * vibes.length)];
+                setSelectedVibe(randomVibe);
+                runAnalysis(randomVibe);
               }
             }}
             onBack={() => setCurrentStep(AppStep.UPLOAD)}
