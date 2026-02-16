@@ -28,10 +28,10 @@ const mockPartnerImages: Record<PartnerVibe, string> = {
  * 风格提示词映射
  */
 const vibePrompts: Record<PartnerVibe, string> = {
-    gentle: '温柔气质的伴侣，自然微笑，柔和眼神，亲和力强，自然光生活照，真实自然，与参考图中人物般配',
-    sunny: '阳光活力的伴侣，开朗笑容，健康自然，邻家感，户外自然光，生活照风格，与参考图中人物般配',
-    intellectual: '知性沉稳的伴侣，自然神态，文艺气质，书卷感，日常场景，真实生活照，与参考图中人物般配',
-    mysterious: '独特气质的伴侣，神秘眼神，艺术气息，个性风格，自然光影，真实生活照，与参考图中人物般配'
+    gentle: '温柔气质，自然微笑，柔和眼神，亲和力强，自然光生活照，真实自然',
+    sunny: '阳光活力，开朗笑容，健康自然，邻家感，户外自然光，生活照风格',
+    intellectual: '知性沉稳，自然神态，文艺气质，书卷感，日常场景，真实生活照',
+    mysterious: '独特气质，神秘眼神，艺术气息，个性风格，自然光影，真实生活照'
 };
 
 /**
@@ -52,7 +52,7 @@ export const generatePartnerImage = async (
         return mockPartnerImages[vibe];
     }
 
-    const prompt = `基于参考图中的人物特征，想象并生成一位与 TA 般配的理想伴侣照片。这是一张单人肖像照。画面中只能出现这位新生成的伴侣（人物 B）。绝对不要在画面中包含参考图中的原始人物（人物 A）。${vibePrompts[vibe]}，自然真实的生活照，邻家感，不是精修写真，看起来像真实会见到的人，与上传照片中的人看起来很般配`;
+    const prompt = `基于参考图中的人物特征，想象并生成一位与 TA 般配的理想伴侣照片。这是一张单人肖像照。画面中只能出现这位新生成的伴侣（人物 B），绝对不要在画面中包含参考图中的原始人物（人物 A），且 A 与 B 互为异性。${vibePrompts[vibe]}，自然真实的生活照，邻家感，不是精修写真，看起来像真实会见到的人，与上传照片中的人看起来很般配`;
 
     try {
         const imagesResponse = await (client!.images.generate as any)({
