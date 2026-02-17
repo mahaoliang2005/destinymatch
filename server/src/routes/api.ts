@@ -1,31 +1,46 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import multer from 'multer';
 import { analyze, health } from '../controllers/analysis.js';
-import { saveImage } from '../services/imageStorage.js';
+import { saveImageFromBuffer } from '../services/imageStorage.js';
 import { checkAndIncrementUsage } from '../services/usageTracker.js';
 
 const router = Router();
 
+// Configure multer for memory storage (don't save to disk yet, we'll handle that)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept only image files
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
 // Health check endpoint
 router.get('/health', health);
 
-// Upload image endpoint - saves base64 image to disk and returns URL
-router.post('/upload-image', (req: Request, res: Response) => {
+// Upload image endpoint - saves image from multipart/form-data to disk and returns URL
+router.post('/upload-image', upload.single('image'), async (req: Request, res: Response) => {
   try {
-    const { imageBase64 } = req.body;
-
-    if (!imageBase64 || typeof imageBase64 !== 'string') {
+    if (!req.file) {
       res.status(400).json({
         success: false,
         error: {
           code: 'INVALID_REQUEST',
-          message: 'Missing or invalid imageBase64 field'
+          message: 'Missing or invalid image file'
         }
       });
       return;
     }
 
-    // Save image to disk and get URL path
-    const imageUrl = saveImage(imageBase64);
+    // Save image buffer to disk and get URL path
+    const imageUrl = await saveImageFromBuffer(req.file.buffer, req.file.mimetype);
 
     res.json({
       success: true,

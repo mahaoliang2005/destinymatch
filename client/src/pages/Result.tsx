@@ -72,11 +72,33 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
             }
         };
 
-        fetchPartnerImage();
+        const fetchUserImage = async () => {
+            if (userImage) {
+                // If userImage is already a data URL (base64), use it directly
+                if (userImage.startsWith('data:')) {
+                    setUserImageBase64(userImage);
+                    return;
+                }
 
-        if (userImage) {
-            setUserImageBase64(userImage);
-        }
+                // If userImage is a blob URL or relative URL, fetch and convert to base64
+                try {
+                    const response = await fetch(userImage);
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setUserImageBase64(reader.result as string);
+                    };
+                    reader.readAsDataURL(blob);
+                } catch (error) {
+                    console.error('Failed to fetch user image:', error);
+                    // Fallback to original URL if fetch fails
+                    setUserImageBase64(userImage);
+                }
+            }
+        };
+
+        fetchPartnerImage();
+        fetchUserImage();
     }, [userImage, result.partnerImageUrl]);
 
     // Show toast message

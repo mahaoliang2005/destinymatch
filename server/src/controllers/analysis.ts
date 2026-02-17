@@ -2,8 +2,7 @@ import { Request, Response } from 'express';
 import { AnalyzeRequest, ApiResponse, AnalysisResult, PartnerVibe } from '../types/index.js';
 import { generatePartnerImage } from '../services/dreamina.js';
 import { generateDestinyAnalysis } from '../services/siliconflow.js';
-import { saveImage } from '../services/imageStorage.js';
-import { fetchImageAsBase64 } from '../services/imageProxy.js';
+import { saveImageFromBuffer } from '../services/imageStorage.js';
 
 /**
  * Generate compatibility score
@@ -75,33 +74,30 @@ export const analyze = async (
     const score = generateCompatibilityScore();
     console.log('[Analysis] Generated score:', score);
 
-    // Fetch the user image as base64 for the Dreamina API
-    // User image URL could be either a local path (/images/...) or a remote URL
-    let userImageBase64: string;
+    // Prepare the user image URL for Dreamina API
+    // For local images (/images/...), construct full public URL
+    // For remote URLs, use as-is
+    let finalImageUrl: string;
     if (userImageUrl.startsWith('/images/')) {
-      // Local image - read from disk
-      const fs = await import('fs');
-      const path = await import('path');
-      const { fileURLToPath } = await import('url');
-      const __dirname = path.dirname(fileURLToPath(import.meta.url));
-      const imagePath = path.join(__dirname, '../../public', userImageUrl);
-      const buffer = fs.readFileSync(imagePath);
-      userImageBase64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+      // Local image - need to construct full public URL
+      const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://destiny.mahaoliang.tech/';
+      finalImageUrl = `${publicBaseUrl}${userImageUrl}`;
     } else {
-      // Remote URL - fetch it
-      userImageBase64 = await fetchImageAsBase64(userImageUrl);
+      // Remote URL - use directly
+      finalImageUrl = userImageUrl;
     }
+    console.log('[Analysis] Final image URL for Dreamina:', finalImageUrl.substring(0, 50) + '...');
 
     // 2. Parallel calls to image generation and text analysis
-    const [partnerImageBase64, analysis] = await Promise.all([
-      // Dreamina: Generate partner photo (returns base64)
-      generatePartnerImage(userImageBase64, vibe as PartnerVibe),
+    const [partnerImageData, analysis] = await Promise.all([
+      // Dreamina: Generate partner photo (returns buffer)
+      generatePartnerImage(finalImageUrl, vibe as PartnerVibe),
       // DeepSeek: Generate destiny analysis
       generateDestinyAnalysis(vibe as PartnerVibe, score)
     ]);
 
     // 3. Save partner image to disk and get URL
-    const partnerImageUrl = saveImage(partnerImageBase64);
+    const partnerImageUrl = await saveImageFromBuffer(partnerImageData.buffer, partnerImageData.contentType);
     console.log('[Analysis] Saved partner image:', partnerImageUrl);
 
     console.log('[Analysis] Analysis complete');

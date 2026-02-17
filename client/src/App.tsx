@@ -14,18 +14,16 @@ import { runDestinyMatch } from './services/destiny';
 
 /**
  * Upload image to server and get URL
- * @param imageBase64 Base64 encoded image
+ * @param imageFile File object to upload
  * @returns Image URL from server
  */
-const uploadImage = async (imageBase64: string): Promise<string> => {
+const uploadImage = async (imageFile: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+
   const response = await fetch('/api/upload-image', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      imageBase64
-    })
+    body: formData
   });
 
   if (!response.ok) {
@@ -46,7 +44,7 @@ const uploadImage = async (imageBase64: string): Promise<string> => {
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.HOME);
-  const [userImageBase64, setUserImageBase64] = useState<string | null>(null);
+  const [userImageFile, setUserImageFile] = useState<File | null>(null);
   const [userImageUrl, setUserImageUrl] = useState<string | null>(null);
   const [selectedVibe, setSelectedVibe] = useState<PartnerVibe>('gentle');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -85,8 +83,8 @@ const App: React.FC = () => {
   const handlePrivacyAgree = () => setCurrentStep(AppStep.UPLOAD);
   const handlePrivacyDisagree = () => setCurrentStep(AppStep.HOME);
   
-  const handleImageUpload = (base64: string) => {
-    setUserImageBase64(base64);
+  const handleImageUpload = (file: File) => {
+    setUserImageFile(file);
     setCurrentStep(AppStep.SELECT_VIBE);
   };
 
@@ -96,13 +94,13 @@ const App: React.FC = () => {
   };
 
   const runAnalysis = async (vibe: PartnerVibe) => {
-    if (!userImageBase64) return;
+    if (!userImageFile) return;
     setCurrentStep(AppStep.LOADING);
 
     try {
       // Step 1: Upload user image to server and get URL
       console.log('[App] Uploading user image...');
-      const uploadedImageUrl = await uploadImage(userImageBase64);
+      const uploadedImageUrl = await uploadImage(userImageFile);
       setUserImageUrl(uploadedImageUrl);
       console.log('[App] User image uploaded:', uploadedImageUrl);
 
@@ -136,7 +134,7 @@ const App: React.FC = () => {
   };
 
   const handleRestart = () => {
-    setUserImageBase64(null);
+    setUserImageFile(null);
     setUserImageUrl(null);
     setAnalysisResult(null);
     setCurrentStep(AppStep.HOME);
@@ -155,9 +153,9 @@ const App: React.FC = () => {
       case AppStep.SELECT_VIBE:
         return (
           <SelectVibe
-            userImage={userImageBase64}
+            userImage={userImageFile ? URL.createObjectURL(userImageFile) : null}
             onConfirm={() => {
-              if (userImageBase64) {
+              if (userImageFile) {
                 // 随机选择一种伴侣风格
                 const vibes: PartnerVibe[] = ['gentle', 'sunny', 'intellectual', 'mysterious'];
                 const randomVibe = vibes[Math.floor(Math.random() * vibes.length)];
@@ -171,10 +169,10 @@ const App: React.FC = () => {
       case AppStep.LOADING:
         return <Loading />;
       case AppStep.RESULT:
-        return analysisResult && userImageBase64 ? (
+        return analysisResult && userImageFile ? (
           <Result
             result={analysisResult}
-            userImage={userImageBase64}
+            userImage={URL.createObjectURL(userImageFile)}
             vibe={selectedVibe}
             onRestart={handleRestart}
           />

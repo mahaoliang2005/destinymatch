@@ -31,6 +31,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 server.log
+*.log
+app.log
+client.log
 
 # Testing
 coverage/
