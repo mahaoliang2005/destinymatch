@@ -1,77 +1,178 @@
 # 命运匹配 (Destiny Match) - 技术实现文档
 
-> 版本：v1.0
-> 更新日期：2026-02-16
-> 状态：基于现有架构的完整技术规范
+> 版本：v2.0
+> 更新日期：2026-02-17
+> 状态：基于前后端分离架构的完整技术规范
 
 ---
 
-## 1. 技术架构概览
+## 1. 架构概述
 
-### 1.1 技术栈选型
+### 1.1 系统架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              客户端 (Client)                                  │
+│                              Port: 3000                                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │   Home.tsx  │  │ Privacy.tsx │  │ Upload.tsx  │  │   SelectVibe.tsx    │  │
+│  │   首页       │  │  隐私协议    │  │ 照片上传     │  │     风格选择         │  │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
+│         └─────────────────┴─────────────────┴──────────────────┘              │
+│                                       │                                       │
+│                              App.tsx (状态管理)                                │
+│                                       │                                       │
+│                    services/destiny.ts (API 调用)                             │
+│                                       │                                       │
+│                              HTTP /api/*                                      │
+└───────────────────────────────────────┬───────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              服务端 (Server)                                  │
+│                              Port: 3001                                       │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                         Express 路由层                                  │   │
+│  │  POST /api/upload-image    →  保存用户照片 → 返回 URL                   │   │
+│  │  POST /api/analyze         →  AI分析 → 返回结果                        │   │
+│  │  GET  /api/health          →  健康检查                                  │   │
+│  └───────────────────────────────┬──────────────────────────────────────┘   │
+│                                  │                                           │
+│  ┌───────────────────────────────┼──────────────────────────────────────┐   │
+│  │                               ▼                                      │   │
+│  │  ┌─────────────────────┐   ┌─────────────────────┐                  │   │
+│  │  │   services/         │   │   services/         │                  │   │
+│  │  │   dreamina.ts       │   │   siliconflow.ts    │                  │   │
+│  │  │   (图像生成)         │   │   (文本分析)         │                  │   │
+│  │  │                     │   │                     │                  │   │
+│  │  │  即梦 API            │   │  DeepSeek API       │                  │   │
+│  │  │  ark.volces.com      │   │  siliconflow.cn     │                  │   │
+│  │  └─────────────────────┘   └─────────────────────┘                  │   │
+│  │                                                                         │   │
+│  │  ┌─────────────────────┐   ┌─────────────────────┐                  │   │
+│  │  │   services/         │   │   services/         │                  │   │
+│  │  │   imageStorage.ts   │   │   usageTracker.ts   │                  │   │
+│  │  │   (图片存储)         │   │   (使用限制)         │                  │   │
+│  │  │                     │   │                     │                  │   │
+│  │  │  public/images/      │   │  data/usage/         │                  │   │
+│  │  │  (文件系统)          │   │  (JSON文件)          │                  │   │
+│  │  └─────────────────────┘   └─────────────────────┘                  │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.2 技术栈
 
 | 层级 | 技术 | 版本 | 说明 |
 |-----|------|-----|------|
+| **前端** ||||
 | 前端框架 | React | 19.2.4 | 函数式组件 + Hooks |
 | 构建工具 | Vite | 6.2.0 | 快速开发服务器 + HMR |
 | 开发语言 | TypeScript | 5.8.2 | 类型安全 |
 | UI 样式 | Tailwind CSS | v3 (CDN) | 原子化 CSS |
-| AI 服务 SDK | OpenAI | ^4.77.0 | 即梦 + 硅基流动 API 调用 |
-| 包管理 | npm | - | ES Modules |
+| 分享卡片 | html-to-image | ^1.11.11 | DOM 转图片 |
+| **后端** ||||
+| 服务端框架 | Express | 4.18.2 | RESTful API |
+| 开发语言 | TypeScript | 5.8.2 | 类型安全 |
+| AI SDK | OpenAI | ^4.77.0 | 即梦 + 硅基流动 API 兼容层 |
+| 文件存储 | Node.js fs | - | 图片 + JSON 数据 |
+| 身份标识 | UUID | ^11.0.0 | 用户唯一标识 |
+| **基础设施** ||||
+| 反向代理 | Nginx | - | 生产环境部署 |
+| 进程管理 | PM2 | - | Node.js 进程守护 |
 
-### 1.2 架构图
+### 1.3 项目结构
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         命运匹配应用                              │
-├─────────────────────────┬───────────────────────────────────────┤
-│      表现层 (Pages)      │           业务逻辑层                   │
-├─────────────────────────┼───────────────────────────────────────┤
-│  Home.tsx               │  App.tsx (状态管理中枢)                 │
-│  Privacy.tsx            │    ├─ AppStep 状态机                   │
-│  Upload.tsx             │    ├─ 用户数据状态                     │
-│  SelectVibe.tsx         │    └─ 历史记录管理                     │
-│  Loading.tsx            │                                       │
-│  Result.tsx             │  services/dreamina.ts                 │
-│  Records.tsx            │  services/siliconflow.ts              │
-│  ErrorPage.tsx          │    └─ AI 图像/文本服务                 │
-├─────────────────────────┴───────────────────────────────────────┤
-│                         数据层                                   │
-│  localStorage - 历史记录持久化                                    │
-│  即梦 API - 图像生成服务                                          │
-│  硅基流动 API - 文本生成服务                                       │
-└─────────────────────────────────────────────────────────────────┘
+destiny-match/
+├── client/                      # 前端项目
+│   ├── src/
+│   │   ├── App.tsx             # 应用主组件 + 状态管理
+│   │   ├── index.tsx           # 应用入口
+│   │   ├── types.ts            # TypeScript 类型定义
+│   │   ├── pages/              # 页面组件
+│   │   │   ├── Home.tsx        # 首页
+│   │   │   ├── Privacy.tsx     # 隐私协议
+│   │   │   ├── Upload.tsx      # 照片上传
+│   │   │   ├── SelectVibe.tsx  # 风格选择
+│   │   │   ├── Loading.tsx     # 生成中
+│   │   │   ├── Result.tsx      # 结果展示
+│   │   │   ├── Records.tsx     # 历史记录
+│   │   │   ├── ErrorPage.tsx   # 错误页面
+│   │   │   └── RateLimitPage.tsx # 限流页面
+│   │   ├── services/           # API 服务层
+│   │   │   ├── destiny.ts      # 主分析流程
+│   │   │   └── share.ts        # 分享功能
+│   │   └── utils/
+│   │       └── userId.ts       # 用户ID生成
+│   ├── index.html              # HTML 模板
+│   ├── vite.config.ts          # Vite 配置
+│   └── package.json
+│
+├── server/                      # 后端项目
+│   ├── src/
+│   │   ├── index.ts            # Express 入口
+│   │   ├── routes/
+│   │   │   └── api.ts          # API 路由定义
+│   │   ├── controllers/
+│   │   │   └── analysis.ts     # 分析控制器
+│   │   ├── services/           # 业务服务层
+│   │   │   ├── dreamina.ts     # 即梦图像生成
+│   │   │   ├── siliconflow.ts  # DeepSeek 文本分析
+│   │   │   ├── imageStorage.ts # 图片存储管理
+│   │   │   ├── imageProxy.ts   # 外部图片获取
+│   │   │   └── usageTracker.ts # 使用次数限制
+│   │   └── types/
+│   │       └── index.ts        # 服务端类型定义
+│   ├── public/images/          # 图片存储目录
+│   ├── data/usage/             # 使用记录存储
+│   ├── .env                    # 环境变量
+│   └── package.json
+│
+├── docs/                        # 文档目录
+│   ├── functional-requirements.md  # 功能需求
+│   ├── user-flow.md                # 用户流程
+│   ├── technical-spec-v2.md        # 本文档
+│   └── ideal.md                    # 项目愿景
+│
+├── nginx.conf                   # Nginx 生产配置
+└── package.json                 # 根项目配置
 ```
 
 ---
 
-## 2. 类型系统规范
+## 2. 数据模型
 
-### 2.1 核心类型定义
+### 2.1 类型定义
 
 ```typescript
-// types.ts - 现有实现
+// ==================== 共享类型 ====================
+// client/src/types.ts & server/src/types/index.ts
 
+/** 伴侣风格类型 */
 export type PartnerVibe = 'gentle' | 'sunny' | 'intellectual' | 'mysterious';
 
+/** 分析结果 */
 export interface AnalysisResult {
-  score: number;                    // 匹配度评分 (0-100)
-  interpretation: string;           // 缘分解读文本
-  emotionalResonance: string;       // 情感共鸣分析
-  communicationStyle: string;       // 沟通风格分析
-  coreValues: string;               // 核心价值观分析
-  partnerType: string;              // 伴侣类型标签
-  partnerImageBase64?: string;      // 生成伴侣照片 (可选)
+  score: number;                    // 般配度评分 (60-98)
+  interpretation: string;           // 缘分解读文本 (~200 字)
+  emotionalResonance: string;       // 情感共鸣分析 (50-80 字)
+  communicationStyle: string;       // 沟通风格分析 (50-80 字)
+  coreValues: string;               // 核心价值观分析 (50-80 字)
+  partnerType: string;              // 伴侣类型标签 (8 字以内)
+  partnerImageUrl: string;          // 生成的伴侣照片 URL
 }
 
+/** 历史记录 */
 export interface HistoryRecord extends AnalysisResult {
-  id: string;                       // 唯一标识
+  id: string;                       // 唯一标识 (UUID)
   timestamp: number;                // 生成时间戳
-  userName: string;                 // 用户名
-  userImageBase64: string;          // 用户上传的照片
+  userName: string;                 // 用户名 (默认"有缘人")
+  userImageUrl: string;             // 用户上传的照片 URL
   vibe: PartnerVibe;                // 选择的风格
 }
 
+/** 应用步骤状态 */
 export enum AppStep {
   HOME,        // 首页
   PRIVACY,     // 隐私协议
@@ -80,880 +181,691 @@ export enum AppStep {
   LOADING,     // 生成中
   RESULT,      // 结果展示
   RECORDS,     // 历史记录
-  ERROR        // 错误页面
+  ERROR,       // 错误页面
+  RATE_LIMIT   // 限流页面
+}
+
+// ==================== 服务端特有类型 ====================
+// server/src/types/index.ts
+
+/** 分析请求 */
+export interface AnalyzeRequest {
+  userImageUrl: string;             // 用户照片 URL (/images/...)
+  vibe: PartnerVibe;
+  userId?: string;
+}
+
+/** API 统一响应 */
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+/** 限流信息 */
+export interface RateLimitInfo {
+  remaining: number;
+  limit: number;
+  resetDate: string;                // YYYY-MM-DD
 }
 ```
 
-### 2.2 风格映射配置
+### 2.2 文件存储结构
+
+```
+server/
+├── public/images/                 # 图片存储目录
+│   └── 2026-02-17/               # 按日期分子目录
+│       ├── user_abc123.jpg       # 用户上传照片
+│       ├── partner_def456.jpg    # AI生成的伴侣照片
+│       └── ...
+│
+└── data/usage/                    # 使用记录存储
+    ├── user-abc-123.json         # 用户A的使用记录
+    └── user-def-456.json         # 用户B的使用记录
+```
+
+**使用记录文件格式 (JSON):**
+```json
+{
+  "count": 2,
+  "date": "2026-02-17"
+}
+```
+
+### 2.3 本地存储结构 (localStorage)
 
 ```typescript
-// 风格配置常量
-export const VIBE_CONFIG: Record<PartnerVibe, {
-  label: string;
-  icon: string;
-  description: string;
-  prompt: string;
-}> = {
-  gentle: {
-    label: '温柔型',
-    icon: '💕',
-    description: '如春风般温暖的 TA，善解人意，会给你最贴心的陪伴',
-    prompt: 'soft, gentle eyes, warm smile, elegant, caring personality'
-  },
-  sunny: {
-    label: '阳光型',
-    icon: '☀️',
-    description: '充满活力的 TA，笑容灿烂，会带你探索世界的美好',
-    prompt: 'bright smile, energetic, sporty, outdoorsy, positive attitude'
-  },
-  intellectual: {
-    label: '知性型',
-    icon: '📚',
-    description: '聪慧内敛的 TA，思想深邃，能与你进行灵魂对话',
-    prompt: 'glasses, intellectual, sophisticated, calm, thoughtful'
-  },
-  mysterious: {
-    label: '神秘型',
-    icon: '🌙',
-    description: '独特迷人的 TA，有着神秘的魅力，让生活充满惊喜',
-    prompt: 'mysterious eyes, artistic, unique style, enigmatic aura'
-  }
-};
+// Key: destiny_history
+interface HistoryStorage {
+  records: HistoryRecord[];         // 最多保存 5 条
+}
 ```
 
 ---
 
-## 3. 状态管理设计
+## 3. 接口设计
 
-### 3.1 应用状态机
+### 3.1 API 端点概览
+
+| 方法 | 端点 | 描述 | 认证 |
+|-----|------|------|------|
+| POST | `/api/upload-image` | 上传图片，返回 URL | 无 |
+| POST | `/api/analyze` | 执行 AI 分析 | X-User-Id Header |
+| GET | `/api/health` | 健康检查 | 无 |
+
+### 3.2 POST /api/upload-image
+
+**功能描述：** 接收 Base64 图片，保存到磁盘，返回可访问的 URL。
+
+**请求格式：**
+```http
+POST /api/upload-image
+Content-Type: application/json
+
+{
+  "imageBase64": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ..."
+}
+```
+
+**响应格式 (成功):**
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "success": true,
+  "data": {
+    "imageUrl": "/images/2026-02-17/abc123.jpg"
+  }
+}
+```
+
+**响应格式 (失败):**
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Missing or invalid imageBase64 field"
+  }
+}
+```
+
+### 3.3 POST /api/analyze
+
+**功能描述：** 核心分析接口，执行限流检查、调用 AI 服务生成结果。
+
+**请求头：**
+```http
+X-User-Id: abc-123-uuid  // 用户唯一标识
+```
+
+**请求格式：**
+```http
+POST /api/analyze
+Content-Type: application/json
+X-User-Id: abc-123
+
+{
+  "userImageUrl": "/images/2026-02-17/user_abc.jpg",
+  "vibe": "gentle"
+}
+```
+
+**响应格式 (成功):**
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-RateLimit-Remaining: 2
+X-RateLimit-Limit: 3
+
+{
+  "success": true,
+  "data": {
+    "score": 87,
+    "interpretation": "你们的灵魂有着奇妙的共鸣...",
+    "emotionalResonance": "你们的情感深度契合...",
+    "communicationStyle": "你们善于倾听彼此...",
+    "coreValues": "你们都珍视真挚的情感...",
+    "partnerType": "天作之合 · 灵魂伴侣",
+    "partnerImageUrl": "/images/2026-02-17/partner_xyz.jpg"
+  }
+}
+```
+
+**响应格式 (限流):**
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "今日次数已用完，请明天再试"
+  }
+}
+```
+
+**响应格式 (其他错误):**
+```http
+HTTP/1.1 500 Internal Server Error
+Content-Type: application/json
+
+{
+  "success": false,
+  "error": {
+    "code": "ANALYSIS_ERROR",
+    "message": "图像生成失败: API 超时"
+  }
+}
+```
+
+### 3.4 GET /api/health
+
+**功能描述：** 健康检查，返回服务状态和 mock 模式信息。
+
+**响应格式：**
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "status": "ok",
+  "timestamp": "2026-02-17T10:30:00.000Z",
+  "env": {
+    "mockMode": false
+  }
+}
+```
+
+### 3.5 错误码定义
+
+| 错误码 | 描述 | HTTP 状态 |
+|-------|------|----------|
+| `INVALID_REQUEST` | 请求参数无效 | 400 |
+| `MISSING_USER_ID` | 缺少用户标识 | 400 |
+| `UPLOAD_ERROR` | 图片保存失败 | 500 |
+| `ANALYSIS_ERROR` | AI 分析失败 | 500 |
+| `RATE_LIMIT_EXCEEDED` | 超过每日限制 | 429 |
+
+---
+
+## 4. 功能实现方案
+
+### 4.1 P0 功能实现对照
+
+| 需求 ID | 功能 | 实现位置 | 关键实现 |
+|-------|------|---------|---------|
+| **UM-001** | 首页入口 | `client/src/pages/Home.tsx` | 星空背景动画，开始按钮路由跳转 |
+| **PM-001** | 照片上传 | `client/src/pages/Upload.tsx` | FileReader 转 Base64，拖拽支持 |
+| **PM-002** | 照片预览 | `client/src/pages/Upload.tsx` | 图片压缩，旋转，重新上传 |
+| **PM-004** | 隐私声明 | `client/src/pages/Privacy.tsx` | 协议内容展示，同意/拒绝处理 |
+| **PM-003** | 风格选择 | `client/src/pages/SelectVibe.tsx` | 4 种风格卡片，选中状态管理 |
+| **AI-001** | 图像生成 | `server/src/services/dreamina.ts` | 即梦 API 调用，图片转 Base64 |
+| **AI-001** | 文本分析 | `server/src/services/siliconflow.ts` | DeepSeek API 调用，JSON 解析 |
+| **RM-001** | 结果展示 | `client/src/pages/Result.tsx` | 分数动画，解读展示，图片显示 |
+| **SM-001** | 错误处理 | `client/src/pages/ErrorPage.tsx` | 错误分类，重试机制 |
+| **SM-003** | 使用限制 | `server/src/services/usageTracker.ts` | 文件存储，每日 3 次限制 |
+
+### 4.2 P1 功能实现对照
+
+| 需求 ID | 功能 | 实现位置 | 关键实现 |
+|-------|------|---------|---------|
+| **UM-003** | 历史记录 | `client/src/App.tsx` + `pages/Records.tsx` | localStorage 存储，最多 5 条 |
+| **AI-003** | 般配度算法 | `server/src/controllers/analysis.ts:13-32` | 加权随机，60-98 分数分布 |
+| **RM-002** | 分享功能 | `client/src/pages/Result.tsx` + `services/share.ts` | html-to-image 生成卡片 |
+| **RM-003** | 重新生成 | `client/src/pages/Result.tsx` | 保留照片，跳转风格选择 |
+| **SM-002** | 性能优化 | `client/vite.config.ts` | 代理配置，代码分割 |
+
+### 4.3 核心流程实现
+
+#### 4.3.1 图片上传流程
 
 ```typescript
-// App.tsx 状态定义
+// client/src/pages/Upload.tsx
+const handleUpload = async (file: File) => {
+  // 1. 客户端压缩图片
+  const compressed = await compressImage(file, 1024, 0.8);
+
+  // 2. 转换为 Base64
+  const base64 = await fileToBase64(compressed);
+
+  // 3. 上传到服务端
+  const response = await fetch('/api/upload-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64: base64 })
+  });
+
+  // 4. 获取 URL，保存到状态
+  const { data } = await response.json();
+  setUserImageUrl(data.imageUrl);
+};
+```
+
+```typescript
+// server/src/routes/api.ts
+router.post('/api/upload-image', (req, res) => {
+  const { imageBase64 } = req.body;
+
+  // 保存到磁盘，返回 URL
+  const imageUrl = saveImage(imageBase64);
+  // 结果：/images/2026-02-17/uuid.jpg
+
+  res.json({ success: true, data: { imageUrl } });
+});
+```
+
+#### 4.3.2 AI 分析流程
+
+```typescript
+// server/src/controllers/analysis.ts
+export const analyze = async (req, res) => {
+  const { userImageUrl, vibe } = req.body;
+
+  // 1. 生成般配度分数 (服务端)
+  const score = generateCompatibilityScore();
+
+  // 2. 读取用户图片为 Base64
+  const userImageBase64 = await readImageAsBase64(userImageUrl);
+
+  // 3. 并行调用 AI 服务
+  const [partnerImageBase64, analysis] = await Promise.all([
+    generatePartnerImage(userImageBase64, vibe),    // 即梦
+    generateDestinyAnalysis(vibe, score)             // DeepSeek
+  ]);
+
+  // 4. 保存生成的伴侣图片
+  const partnerImageUrl = saveImage(partnerImageBase64);
+
+  // 5. 返回结果
+  res.json({
+    success: true,
+    data: { ...analysis, score, partnerImageUrl }
+  });
+};
+```
+
+#### 4.3.3 限流检查流程
+
+```typescript
+// server/src/routes/api.ts
+router.post('/api/analyze', (req, res, next) => {
+  const userId = req.headers['x-user-id'];
+
+  // 检查并增加使用次数
+  const { allowed, remaining } = checkAndIncrementUsage(userId);
+
+  if (!allowed) {
+    return res.status(429).json({
+      error: { code: 'RATE_LIMIT_EXCEEDED', message: '今日次数已用完' }
+    });
+  }
+
+  res.setHeader('X-RateLimit-Remaining', remaining);
+  next();
+}, analyze);
+```
+
+```typescript
+// server/src/services/usageTracker.ts
+export const checkAndIncrementUsage = (userId: string) => {
+  const today = getToday();  // "2026-02-17"
+  const usage = readUsage(userId);  // { count: 2, date: "2026-02-17" }
+
+  if (!usage || usage.date !== today) {
+    writeUsage(userId, { count: 1, date: today });
+    return { allowed: true, remaining: 2 };
+  }
+
+  if (usage.count >= 3) {
+    return { allowed: false, remaining: 0 };
+  }
+
+  usage.count++;
+  writeUsage(userId, usage);
+  return { allowed: true, remaining: 3 - usage.count };
+};
+```
+
+### 4.4 状态流转实现
+
+```typescript
+// client/src/App.tsx
 const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.HOME);
 const [userImage, setUserImage] = useState<string | null>(null);
 const [selectedVibe, setSelectedVibe] = useState<PartnerVibe>('gentle');
 const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-const [history, setHistory] = useState<HistoryRecord[]>([]);
-```
 
-### 3.2 状态流转图
-
-```
-                    ┌─────────────┐
-                    │    HOME     │
-                    │    首页     │
-                    └──────┬──────┘
-                           │ handleStart()
-                           ▼
-                    ┌─────────────┐
-              ┌─────│   PRIVACY   │─────┐
-              │     │  隐私协议    │     │
-              │     └──────┬──────┘     │
-              │            │             │
-   onDisagree │            │ onAgree()   │
-              │            ▼             │
-              │     ┌─────────────┐      │
-              └────►│   UPLOAD    │      │
-                    │  照片上传    │      │
-                    └──────┬──────┘      │
-                           │ onUpload()   │
-                           ▼              │
-                    ┌─────────────┐       │
-                    │ SELECT_VIBE │       │
-                    │  风格选择    │       │
-                    └──────┬──────┘       │
-                           │ onSelect()   │
-                           ▼              │
-                    ┌─────────────┐       │
-      ┌────────────►│   LOADING   │       │
-      │             │  生成中      │       │
-      │             └──────┬──────┘       │
-      │                    │              │
-      │         失败       │ 成功         │
-      │    ┌───────────────┴───────┐      │
-      │    ▼                       ▼      │
-      │ ┌─────────┐           ┌─────────┐ │
-      └─│  ERROR  │           │ RESULT  │─┘
-        │ 错误页   │           │ 结果页   │
-        └────┬────┘           └────┬────┘
-             │                     │
-             │   onRestart()       │ onRestart()
-             └─────────────────────┘
-                           │
-                           ▼
-              ┌─────────────────────┐
-              │       RECORDS       │
-              │      历史记录       │
-              └─────────────────────┘
-```
-
-### 3.3 历史记录持久化
-
-```typescript
-// 加载历史记录
-useEffect(() => {
-  const saved = localStorage.getItem('destiny_history');
-  if (saved) {
-    try {
-      setHistory(JSON.parse(saved));
-    } catch (e) {
-      console.error("Failed to load history", e);
-    }
-  }
-}, []);
-
-// 保存历史记录
-useEffect(() => {
-  localStorage.setItem('destiny_history', JSON.stringify(history));
-}, [history]);
-```
-
----
-
-## 4. AI 服务层设计
-
-### 4.1 架构设计
-
-采用**双服务架构**，完全移除 Gemini，使用国产 AI 服务：
-
-| 服务 | 用途 | 接入方式 |
-|-----|------|---------|
-| **即梦 (Dreamina)** | AI 图像生成 | 字节跳动即梦专业版 API |
-| **硅基流动 (SiliconFlow)** | DeepSeek 文本生成 | DeepSeek API 代理 |
-
-### 4.2 服务一：即梦图像生成 (OpenAI SDK)
-
-```typescript
-// services/dreamina.ts
-
-import OpenAI from 'openai';
-import { PartnerVibe } from '../types';
-
-const ARK_API_KEY = process.env.DREAMINA_API_KEY || '';
-
-// 初始化 Ark 客户端
-const client = new OpenAI({
-  baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-  apiKey: ARK_API_KEY,
-});
-
-/**
- * 风格提示词映射
- */
-const vibePrompts: Record<PartnerVibe, string> = {
-  gentle: '温柔优雅的女性，柔和的眼神，温暖的微笑，长发，精致五官，柔和光线，写真风格',
-  sunny: '阳光开朗的女性，灿烂笑容，活泼气质，运动风格，自然光线，青春活力，写真风格',
-  intellectual: '知性优雅的女性，戴眼镜，沉稳气质，文艺风格，书卷气息，精致妆容，写真风格',
-  mysterious: '神秘迷人的女性，独特气质，艺术感，深邃眼神，时尚风格，氛围感，写真风格'
+// 状态流转
+const handleStart = () => setCurrentStep(AppStep.PRIVACY);
+const handleAgree = () => setCurrentStep(AppStep.UPLOAD);
+const handleUpload = (url: string) => {
+  setUserImage(url);
+  setCurrentStep(AppStep.SELECT_VIBE);
 };
-
-/**
- * 使用即梦 AI 生成伴侣照片
- * @param userImageBase64 用户上传的照片 (Base64)
- * @param vibe 伴侣风格
- * @returns 生成的伴侣照片 URL
- */
-export const generatePartnerImage = async (
-  userImageBase64: string,
-  vibe: PartnerVibe
-): Promise<string> => {
-  const prompt = `基于参考图中的人物，生成这位用户未来伴侣的照片。${vibePrompts[vibe]}，高清人像，专业摄影质感`;
-
-  const imagesResponse = await (client.images.generate as any)({
-    model: 'ep-20260106225752-q46qg',
-    prompt: prompt,
-    size: '2K',
-    response_format: 'url',
-    extra_body: {
-      image: userImageBase64,
-      watermark: true,
-      sequential_image_generation: 'disabled'
-    }
-  });
-
-  const imageUrl = imagesResponse.data[0]?.url;
-
-  if (!imageUrl) {
-    throw new Error('图像生成失败：未返回有效图片 URL');
-  }
-
-  return imageUrl;
-};
-```
-
-### 4.3 服务二：硅基流动 DeepSeek 文本生成 (OpenAI SDK)
-
-```typescript
-// services/siliconflow.ts
-
-import OpenAI from 'openai';
-import { AnalysisResult, PartnerVibe } from '../types';
-
-const SILICONFLOW_API_KEY = process.env.SILICONFLOW_API_KEY || '';
-
-// 初始化 SiliconFlow 客户端
-const client = new OpenAI({
-  baseURL: 'https://api.siliconflow.cn/v1',
-  apiKey: SILICONFLOW_API_KEY,
-});
-
-/**
- * 风格名称映射
- */
-const vibeNames: Record<PartnerVibe, string> = {
-  gentle: '温柔型',
-  sunny: '阳光型',
-  intellectual: '知性型',
-  mysterious: '神秘型'
-};
-
-/**
- * 系统提示词
- */
-const SYSTEM_PROMPT = `你是一位精通东方玄学的"缘分大师"，擅长根据用户的伴侣风格偏好，生成富有诗意和神秘感的缘分解读。
-
-要求：
-1. 语气神秘但不迷信，有趣但不轻浮
-2. 融合东方玄学元素（月老、红线、前世今生等）与现代心理学
-3. 内容要积极正面，给用户美好的期待
-4. 避免过于具体的个人信息（因为你不知道用户的具体情况）
-5. 使用中文回答，语言要优美流畅
-
-输出必须是严格的 JSON 格式，包含以下字段：
-- interpretation: 缘分解读（200字左右，诗意化描述你们的缘分，包含相遇场景、相处模式等）
-- emotionalResonance: 情感共鸣分析（描述你们在情感上的契合点，50-80字）
-- communicationStyle: 沟通风格分析（描述你们的相处和沟通模式，50-80字）
-- coreValues: 核心价值观分析（描述你们在价值观上的契合，50-80字）
-- partnerType: 伴侣类型标签（简短有力的标签，如"命中注定的知己"、"灵魂伴侣"等，8个字以内）`;
-
-/**
- * 使用 DeepSeek 生成缘分解读
- * @param vibe 伴侣风格
- * @param score 般配度分数
- * @returns 分析结果
- */
-export const generateDestinyAnalysis = async (
-  vibe: PartnerVibe,
-  score: number
-): Promise<Omit<AnalysisResult, 'score' | 'partnerImageBase64'>> => {
-
-  const levelText = score >= 91 ? '命中注定 - 跨越时空的缘分' :
-    score >= 81 ? '天作之合 - 命运精心安排' :
-    score >= 71 ? '情投意合 - 灵魂奇妙共鸣' :
-    '有缘相识 - 缘分暗中牵引';
-
-  const userPrompt = `用户选择了"${vibeNames[vibe]}"风格的伴侣。
-
-两人的般配度为 ${score}%。
-
-般配度等级：${levelText}
-
-请生成一份个性化的缘分解读，以 JSON 格式返回。`;
-
-  const response = await client.chat.completions.create({
-    model: 'deepseek-ai/DeepSeek-V3.2',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ],
-    temperature: 0.8,
-    max_tokens: 800,
-    response_format: { type: 'json_object' },
-    stream: false
-  });
-
-  const content = response.choices[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('DeepSeek 返回空内容');
-  }
-
-  const result = JSON.parse(content);
-
-  return {
-    interpretation: result.interpretation || '',
-    emotionalResonance: result.emotionalResonance || '',
-    communicationStyle: result.communicationStyle || '',
-    coreValues: result.coreValues || '',
-    partnerType: result.partnerType || '命中注定的TA'
-  };
-};
-```
-
-### 4.4 组合服务：完整分析流程
-
-```typescript
-// services/destiny.ts
-
-import { generatePartnerImage } from './dreamina';
-import { generateDestinyAnalysis } from './siliconflow';
-import { AnalysisResult, PartnerVibe } from '../types';
-
-/**
- * 完整的命运匹配分析流程
- */
-export const runDestinyMatch = async (
-  userImageBase64: string,
-  vibe: PartnerVibe
-): Promise<AnalysisResult> => {
-  // 1. 客户端生成般配度分数 (60-98 之间)
-  const score = generateCompatibilityScore();
-
-  // 2. 并行调用两个服务
-  const [partnerImage, analysis] = await Promise.all([
-    // 即梦：生成伴侣照片
-    generatePartnerImage(userImageBase64, vibe),
-    // DeepSeek：生成缘分解读
-    generateDestinyAnalysis(vibe, score)
-  ]);
-
-  return {
-    ...analysis,
-    score,
-    partnerImageBase64: partnerImage
-  };
-};
-
-/**
- * 生成般配度分数
- * 控制在 60-98 之间，避免过低打击用户
- */
-const generateCompatibilityScore = (): number => {
-  // 使用加权随机，让高分概率更大
-  const weights = [
-    { range: [60, 70], weight: 0.15 },  // 有缘相识 15%
-    { range: [71, 80], weight: 0.25 },  // 情投意合 25%
-    { range: [81, 90], weight: 0.35 },  // 天作之合 35%
-    { range: [91, 98], weight: 0.25 }   // 命中注定 25%
-  ];
-
-  const random = Math.random();
-  let cumulativeWeight = 0;
-
-  for (const item of weights) {
-    cumulativeWeight += item.weight;
-    if (random <= cumulativeWeight) {
-      return Math.floor(Math.random() * (item.range[1] - item.range[0] + 1)) + item.range[0];
-    }
-  }
-
-  return 85; // 默认分数
-};
-```
-
----
-
-## 5. 页面组件详细规范
-
-### 5.1 组件清单
-
-| 页面 | 文件路径 | 输入 Props | 输出 Callbacks |
-|-----|---------|-----------|---------------|
-| 首页 | `pages/Home.tsx` | - | `onStart()`, `onGoToRecords()` |
-| 隐私协议 | `pages/Privacy.tsx` | - | `onAgree()`, `onDisagree()` |
-| 上传页 | `pages/Upload.tsx` | - | `onUpload(base64)`, `onBack()` |
-| 风格选择 | `pages/SelectVibe.tsx` | - | `onSelect(vibe)`, `onBack()` |
-| 生成中 | `pages/Loading.tsx` | - | - |
-| 结果页 | `pages/Result.tsx` | `result`, `userImage`, `vibe` | `onRestart()` |
-| 历史记录 | `pages/Records.tsx` | `history` | `onBack()` |
-| 错误页 | `pages/ErrorPage.tsx` | - | `onRetry()`, `onBack()` |
-
-### 5.2 页面 Props 接口
-
-```typescript
-// Home.tsx
-interface HomeProps {
-  onStart: () => void;
-  onGoToRecords: () => void;
-}
-
-// Privacy.tsx
-interface PrivacyProps {
-  onAgree: () => void;
-  onDisagree: () => void;
-}
-
-// Upload.tsx
-interface UploadProps {
-  onUpload: (base64: string) => void;
-  onBack: () => void;
-}
-
-// SelectVibe.tsx
-interface SelectVibeProps {
-  onSelect: (vibe: PartnerVibe) => void;
-  onBack: () => void;
-}
-
-// Result.tsx
-interface ResultProps {
-  result: AnalysisResult;
-  userImage: string;
-  vibe: PartnerVibe;
-  onRestart: () => void;
-}
-
-// Records.tsx
-interface RecordsProps {
-  history: HistoryRecord[];
-  onBack: () => void;
-}
-
-// ErrorPage.tsx
-interface ErrorPageProps {
-  onRetry: () => void;
-  onBack: () => void;
-}
-```
-
----
-
-## 6. 样式系统规范
-
-### 6.1 颜色系统
-
-```css
-/* Tailwind 自定义配置 */
---primary: #e6195d;        /* 主色调 - 玫红 */
---primary-gold: #f4c025;   /* 强调色 - 金色 */
---primary-purple: #8311d4; /* 辅助色 - 紫色 */
---background-dark: #211116; /* 深色背景 */
---surface-dark: #2d161e;   /* 卡片背景 */
---gold: #FFD700;           /* 高亮文字 */
-```
-
-### 6.2 自定义 CSS 类
-
-```css
-/* 毛玻璃效果 */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* 星空背景 */
-.stars-bg {
-  background:
-    radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
-}
-
-/* 网格背景 */
-.bg-grid-pattern {
-  background-image:
-    linear-gradient(rgba(230, 25, 93, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(230, 25, 93, 0.1) 1px, transparent 1px);
-}
-```
-
-### 6.3 动画效果
-
-```css
-/* 浮动动画 */
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-20px); }
-}
-.animate-float { animation: float 6s ease-in-out infinite; }
-
-/* 慢速脉冲 */
-@keyframes pulse-slow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
-
-/* 闪光效果 */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.animate-shimmer { animation: shimmer 2s linear infinite; }
-```
-
----
-
-## 7. 功能模块实现对照
-
-### 7.1 已实现功能 ✅
-
-| 需求ID | 功能 | 实现状态 | 实现文件 |
-|-------|------|---------|---------|
-| UM-001 | 首页入口 | ✅ | `pages/Home.tsx` |
-| UM-003 | 历史记录 | ✅ | `App.tsx` + `pages/Records.tsx` |
-| PM-001 | 照片上传 | ✅ | `pages/Upload.tsx` |
-| PM-002 | 照片预览 | ✅ | `pages/Upload.tsx` |
-| PM-003 | 风格选择 | ✅ | `pages/SelectVibe.tsx` |
-| PM-004 | 隐私声明 | ✅ | `pages/Privacy.tsx` |
-| AI-001 | AI 图像生成 | ✅ | `services/dreamina.ts` |
-| AI-001 | AI 文本分析 | ✅ | `services/siliconflow.ts` |
-| RM-001 | 结果展示 | ✅ | `pages/Result.tsx` |
-| RM-003 | 重新生成 | ✅ | `pages/Result.tsx` |
-| SM-001 | 错误处理 | ✅ | `pages/ErrorPage.tsx` |
-
-### 7.2 待实现功能 📋
-
-| 需求ID | 功能 | 优先级 | 建议实现方案 |
-|-------|------|-------|-------------|
-| UM-002 | 用户引导流程 | P1 | 新增 `pages/Onboarding.tsx` |
-| AI-003 | 般配度算法 | P1 | ✅ 已实现于 `services/destiny.ts` |
-| AI-004 | 即梦图像生成 | P0 | ✅ 已实现于 `services/dreamina.ts` |
-| AI-004 | 即梦图像生成 | P1 | 新增 `services/dreamina.ts` |
-| RM-002 | 分享功能 | P1 | 新增 `components/ShareModal.tsx` |
-| RM-004 | 结果下载 | P2 | 使用 `html2canvas` |
-| SM-002 | 性能优化 | P1 | 图片压缩、懒加载 |
-| SM-003 | 数据统计 | P2 | 接入分析服务 |
-
----
-
-## 8. 分享功能实现方案
-
-### 8.1 分享卡片设计
-
-```typescript
-// components/ShareCard.tsx
-interface ShareCardProps {
-  userImage: string;
-  partnerImage?: string;
-  score: number;
-  partnerType: string;
-  interpretation: string;
-}
-
-// 使用 html2canvas 生成分享图
-import html2canvas from 'html2canvas';
-
-export const generateShareImage = async (elementId: string): Promise<string> => {
-  const element = document.getElementById(elementId);
-  if (!element) throw new Error('Element not found');
-
-  const canvas = await html2canvas(element, {
-    backgroundColor: '#211116',
-    scale: 2, // 高清输出
-  });
-
-  return canvas.toDataURL('image/png');
-};
-```
-
-### 8.2 分享渠道
-
-```typescript
-// utils/share.ts
-
-export const shareToWeChat = (imageBase64: string) => {
-  // 复制图片到剪贴板或显示二维码
-};
-
-export const shareToWeibo = (text: string, imageBase64: string) => {
-  // 打开微博分享链接
-};
-
-export const saveToLocal = (imageBase64: string, filename: string) => {
-  const link = document.createElement('a');
-  link.download = filename;
-  link.href = imageBase64;
-  link.click();
-};
-```
-
----
-
-## 9. 性能优化方案
-
-### 9.1 图片处理
-
-```typescript
-// utils/image.ts
-
-export const compressImage = (
-  base64: string,
-  maxWidth: number = 1024,
-  quality: number = 0.8
-): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      // 计算缩放比例
-      const scale = Math.min(maxWidth / img.width, 1);
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-
-      ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = reject;
-    img.src = base64;
-  });
-};
-```
-
-### 9.2 懒加载
-
-```typescript
-// 历史记录图片懒加载
-<img
-  src={record.userImageBase64}
-  loading="lazy"
-  alt="历史记录"
-/>
-```
-
----
-
-## 10. 错误处理规范
-
-### 10.1 错误类型定义
-
-```typescript
-// types/error.ts
-export enum ErrorType {
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  UPLOAD_ERROR = 'UPLOAD_ERROR',
-  AI_GENERATION_ERROR = 'AI_GENERATION_ERROR',
-  IMAGE_PROCESSING_ERROR = 'IMAGE_PROCESSING_ERROR',
-  FACE_DETECTION_ERROR = 'FACE_DETECTION_ERROR',
-  RATE_LIMIT_ERROR = 'RATE_LIMIT_ERROR',
-}
-
-export interface AppError {
-  type: ErrorType;
-  message: string;
-  retryable: boolean;
-}
-```
-
-### 10.2 错误处理流程
-
-```typescript
-// App.tsx 错误处理
-const runAnalysis = async (vibe: PartnerVibe) => {
-  if (!userImage) return;
+const handleSelectVibe = async (vibe: PartnerVibe) => {
+  setSelectedVibe(vibe);
   setCurrentStep(AppStep.LOADING);
 
   try {
-    const result = await analyzeDestiny(userImage, vibe);
-    // 成功处理
+    const result = await runDestinyMatch(userImage!, vibe);
+    setAnalysisResult(result);
+    setCurrentStep(AppStep.RESULT);
   } catch (error) {
-    console.error(error);
-    // 区分错误类型
-    if (error.message.includes('face')) {
-      setErrorType(ErrorType.FACE_DETECTION_ERROR);
-    } else if (error.message.includes('network')) {
-      setErrorType(ErrorType.NETWORK_ERROR);
+    if (error.message.includes('次数已用完')) {
+      setCurrentStep(AppStep.RATE_LIMIT);
     } else {
-      setErrorType(ErrorType.AI_GENERATION_ERROR);
+      setCurrentStep(AppStep.ERROR);
     }
-    setCurrentStep(AppStep.ERROR);
   }
 };
 ```
 
 ---
 
-## 11. API 接口规范
+## 5. 外部服务集成
 
-### 11.1 即梦 (Dreamina) API
+### 5.1 即梦 AI (图像生成)
 
-| 属性 | 配置 |
-|-----|------|
-| 端点 | `https://ark.cn-beijing.volces.com/api/v3/images/generations` |
+**服务信息：**
+| 属性 | 值 |
+|-----|---|
+| 提供商 | 字节跳动 |
+| 端点 | `https://ark.cn-beijing.volces.com/api/v3` |
 | 模型 | `ep-20260106225752-q46qg` |
-| 图生图模式 | `image` 字段传入参考图 |
-| 分辨率 | `2K` |
-| 水印 | 开启 |
 | 认证 | Bearer Token |
 
+**配置代码：**
 ```typescript
-// services/dreamina.ts
-const DREAMINA_API_CONFIG = {
-  endpoint: 'https://ark.cn-beijing.volces.com/api/v3/images/generations',
+// server/src/services/dreamina.ts
+const client = new OpenAI({
+  baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
+  apiKey: process.env.DREAMINA_API_KEY,
+});
+
+const vibePrompts: Record<PartnerVibe, string> = {
+  gentle: '温柔气质，自然微笑，柔和眼神...',
+  sunny: '阳光活力，开朗笑容，健康自然...',
+  intellectual: '知性沉稳，自然神态，文艺气质...',
+  mysterious: '独特气质，神秘眼神，艺术气息...'
+};
+```
+
+**调用方式：**
+```typescript
+const response = await client.images.generate({
   model: 'ep-20260106225752-q46qg',
-  params: {
-    response_format: 'url',
-    size: '2K',
-    sequential_image_generation: 'disabled',
+  prompt: `基于参考图生成伴侣照片...${vibePrompts[vibe]}`,
+  size: '2K',
+  response_format: 'url',
+  extra_body: {
+    image: userImageBase64,  // 参考图
     watermark: true,
-    stream: false
+    sequential_image_generation: 'disabled'
   }
-};
-```
-
-### 11.2 硅基流动 DeepSeek API
-
-| 属性 | 配置 |
-|-----|------|
-| 端点 | `https://api.siliconflow.cn/v1/chat/completions` |
-| 模型 | `deepseek-ai/DeepSeek-V3.2` |
-| 温度 | 0.8 |
-| 最大 tokens | 800 |
-| 响应格式 | JSON |
-| 流式输出 | 关闭 |
-| 认证 | Bearer Token |
-
-```typescript
-// services/siliconflow.ts
-const SILICONFLOW_CONFIG = {
-  endpoint: 'https://api.siliconflow.cn/v1/chat/completions',
-  model: 'deepseek-ai/DeepSeek-V3.2',
-  temperature: 0.8,
-  max_tokens: 800,
-  response_format: { type: 'json_object' },
-  stream: false,
-  system_prompt: '你是一位精通东方玄学的"缘分大师"...',
-};
-```
-
----
-
-## 12. 项目文件结构
-
-```
-destiny-match/
-├── App.tsx                      # 应用主组件
-├── index.tsx                    # 应用入口
-├── index.html                   # HTML 模板 + Tailwind 配置
-├── types.ts                     # TypeScript 类型定义
-├── vite.config.ts               # Vite 配置
-├── tsconfig.json                # TypeScript 配置
-├── package.json                 # 项目依赖
-├── docs/                        # 文档目录
-│   ├── functional-requirements.md  # 功能需求文档
-│   ├── user-flow.md                # 用户流程文档
-│   ├── technical-spec.md           # 技术实现文档 (本文档)
-│   └── ideal.md                    # 项目想法文档
-├── pages/                       # 页面组件
-│   ├── Home.tsx
-│   ├── Privacy.tsx
-│   ├── Upload.tsx
-│   ├── SelectVibe.tsx
-│   ├── Loading.tsx
-│   ├── Result.tsx
-│   ├── Records.tsx
-│   └── ErrorPage.tsx
-├── services/                    # 服务层
-│   ├── dreamina.ts             # 即梦图像生成服务
-│   ├── siliconflow.ts          # 硅基流动 DeepSeek 文本生成服务
-│   └── destiny.ts              # 组合服务：完整分析流程
-├── components/                  # 可复用组件 (待扩展)
-│   ├── ShareCard.tsx           # 分享卡片
-│   ├── LoadingSpinner.tsx      # 加载动画
-│   └── ProgressBar.tsx         # 进度条
-├── utils/                       # 工具函数 (待扩展)
-│   ├── image.ts                # 图片处理
-│   ├── share.ts                # 分享功能
-│   └── storage.ts              # 本地存储
-└── hooks/                       # 自定义 Hooks (待扩展)
-    ├── useLocalStorage.ts
-    └── useImageUpload.ts
-```
-
----
-
-## 13. 开发规范
-
-### 13.1 代码风格
-
-- 使用函数式组件 + React Hooks
-- Props 接口必须显式定义
-- 异步操作使用 `try/catch` 处理
-- 图片资源使用 Base64 或 CDN
-
-### 13.2 命名规范
-
-| 类型 | 命名规范 | 示例 |
-|-----|---------|------|
-| 组件 | PascalCase | `Home.tsx`, `SelectVibe.tsx` |
-| 函数 | camelCase | `handleStart`, `runAnalysis` |
-| 常量 | UPPER_SNAKE_CASE | `VIBE_CONFIG`, `API_ENDPOINT` |
-| 类型 | PascalCase | `PartnerVibe`, `AnalysisResult` |
-| 文件 | camelCase/PascalCase | `gemini.ts`, `Home.tsx` |
-
-### 13.3 Git 提交规范
-
-```
-feat: 新增功能
-fix: 修复 bug
-docs: 文档更新
-style: 代码格式调整
-refactor: 重构
-test: 测试相关
-chore: 构建/工具相关
-```
-
----
-
-## 14. 部署指南
-
-### 14.1 环境变量
-
-```bash
-# .env
-# 即梦 API Key (字节跳动)
-DREAMINA_API_KEY=your_dreamina_api_key_here
-
-# 硅基流动 API Key (DeepSeek 代理)
-SILICONFLOW_API_KEY=your_siliconflow_api_key_here
-```
-
-### 14.2 构建命令
-
-```bash
-# 开发
-npm run dev
-
-# 生产构建
-npm run build
-
-# 预览
-npm run preview
-```
-
-### 14.3 部署配置
-
-```typescript
-// vite.config.ts
-export default defineConfig({
-  server: {
-    port: 3000,
-    host: '0.0.0.0',
-  },
-  define: {
-    'process.env.DREAMINA_API_KEY': JSON.stringify(process.env.DREAMINA_API_KEY),
-    'process.env.SILICONFLOW_API_KEY': JSON.stringify(process.env.SILICONFLOW_API_KEY),
-  },
 });
 ```
 
+**错误处理：**
+```typescript
+try {
+  return await generatePartnerImage(userImageBase64, vibe);
+} catch (error) {
+  console.error('Dreamina API failed:', error);
+  // Fallback: 返回预设的 Mock 图片
+  return fetchImageAsBase64(mockPartnerImages[vibe]);
+}
+```
+
+### 5.2 硅基流动 DeepSeek (文本生成)
+
+**服务信息：**
+| 属性 | 值 |
+|-----|---|
+| 提供商 | 硅基流动 (SiliconFlow) |
+| 端点 | `https://api.siliconflow.cn/v1` |
+| 模型 | `deepseek-ai/DeepSeek-R1-0528-Qwen3-8B` |
+| 认证 | Bearer Token |
+
+**配置代码：**
+```typescript
+// server/src/services/siliconflow.ts
+const client = new OpenAI({
+  baseURL: 'https://api.siliconflow.cn/v1',
+  apiKey: process.env.SILICONFLOW_API_KEY,
+});
+
+const SYSTEM_PROMPT = `你是一位精通东方玄学的"缘分大师"...`;
+```
+
+**调用方式：**
+```typescript
+const response = await client.chat.completions.create({
+  model: 'deepseek-ai/DeepSeek-R1-0528-Qwen3-8B',
+  messages: [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: userPrompt }
+  ],
+  temperature: 0.8,
+  max_tokens: 800,
+  response_format: { type: 'json_object' }
+});
+
+const result = JSON.parse(response.choices[0].message.content);
+```
+
+### 5.3 Mock 模式
+
+当环境变量未配置或包含 `your_` / `test` 时，自动启用 Mock 模式：
+
+```typescript
+// 即梦 Mock
+const USE_MOCK = !ARK_API_KEY || ARK_API_KEY.includes('your_');
+
+const mockPartnerImages: Record<PartnerVibe, string> = {
+  gentle: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
+  sunny: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800',
+  intellectual: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800',
+  mysterious: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800'
+};
+```
+
+### 5.4 错误处理策略
+
+| 错误类型 | 处理策略 |
+|---------|---------|
+| API 超时 | 超时时间 60s，返回友好错误提示 |
+| API 限流 | 指数退避重试，最多 3 次 |
+| API 密钥无效 | 自动降级到 Mock 模式 |
+| 图片生成失败 | 返回预设 Unsplash 图片 |
+| 文本解析失败 | 返回本地预设文案 |
+
 ---
 
-## 15. 迭代路线图
+## 6. 部署配置
 
-### V1.0 (当前版本)
-- ✅ 核心流程实现
-- ✅ 即梦 AI 图像生成
-- ✅ 硅基流动 DeepSeek 文本分析
-- ✅ 历史记录
+### 6.1 环境变量
 
-### V1.1 (规划中)
-- 📋 用户引导流程
-- 📋 分享功能
-- 📋 结果下载
+```bash
+# server/.env
 
-### V1.2 (规划中)
-- 📋 即梦图像生成
-- 📋 DeepSeek 文案生成
-- 📋 性能优化
+# 服务端配置
+PORT=3001
+CLIENT_URL=http://localhost:3000
 
-### V2.0 (未来)
-- 📋 多语言支持
-- 📋 社交登录
-- 📋 云端存储
+# 即梦 API (图像生成)
+DREAMINA_API_KEY=your_dreamina_api_key_here
+
+# 硅基流动 API (文本生成)
+SILICONFLOW_API_KEY=your_siliconflow_api_key_here
+```
+
+### 6.2 开发环境配置
+
+**Vite 代理配置 (client/vite.config.ts):**
+```typescript
+export default defineConfig({
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': 'http://localhost:3001',
+      '/images': 'http://localhost:3001'
+    }
+  }
+});
+```
+
+**开发启动：**
+```bash
+# 根目录
+npm run dev        # 同时启动 client (3000) 和 server (3001)
+npm run dev:client # 仅启动前端
+npm run dev:server # 仅启动后端
+```
+
+### 6.3 生产环境 Nginx 配置
+
+```nginx
+# nginx.conf
+server {
+    listen 80;
+    server_name destiny.app;
+
+    # Gzip 压缩
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript;
+
+    # 前端静态文件
+    location / {
+        root /var/www/destiny-match/client/dist;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+
+        # 静态资源缓存
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+
+    # 后端 API 代理
+    location /api/ {
+        proxy_pass http://localhost:3001/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # AI 生成可能较慢
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+
+        # 大图片上传
+        client_max_body_size 10M;
+    }
+
+    # 图片文件代理
+    location /images/ {
+        proxy_pass http://localhost:3001/images/;
+        proxy_cache_valid 200 1d;
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # 安全响应头
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+}
+```
+
+### 6.4 生产部署步骤
+
+```bash
+# 1. 构建前端
+cd client && npm run build
+
+# 2. 构建后端
+cd server && npm run build
+
+# 3. 配置环境变量
+cp server/.env.example server/.env
+# 编辑 .env，填入 API 密钥
+
+# 4. 安装依赖
+cd server && npm ci --production
+
+# 5. 使用 PM2 启动服务
+pm2 start server/dist/index.js --name destiny-match-api
+
+# 6. 配置 Nginx
+sudo cp nginx.conf /etc/nginx/sites-available/destiny-match
+sudo ln -s /etc/nginx/sites-available/destiny-match /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl restart nginx
+```
+
+### 6.5 目录权限设置
+
+```bash
+# 创建存储目录
+mkdir -p /var/www/destiny-match/server/public/images
+mkdir -p /var/www/destiny-match/server/data/usage
+
+# 设置权限
+chmod 755 /var/www/destiny-match/server/public/images
+chmod 755 /var/www/destiny-match/server/data/usage
+
+# 如果需要，设置目录所有者为运行用户
+chown -R www-data:www-data /var/www/destiny-match/server/public/images
+chown -R www-data:www-data /var/www/destiny-match/server/data/usage
+```
+
+---
+
+## 7. 附录
+
+### 7.1 技术决策记录
+
+| 决策 | 选项 | 选择 | 原因 |
+|-----|------|------|------|
+| 用户身份 | Cookie / JWT / UUID | UUID | 无账号系统，简单轻量 |
+| 图片存储 | 云存储 / 本地文件 | 本地文件 | 降低复杂度，隐私友好 |
+| 使用限制 | Redis / 文件 | 文件 | 单机部署，无需外部依赖 |
+| AI 图像 | Gemini / 即梦 | 即梦 | 国内服务，参考图模式 |
+| AI 文本 | GPT / DeepSeek | DeepSeek | 中文优化好，成本低 |
+
+### 7.2 性能指标
+
+| 指标 | 目标 | 当前 |
+|-----|------|------|
+| 首屏加载 | < 3s | ~1.5s |
+| 图片上传 | < 5s | ~2s (2MB) |
+| AI 生成 | < 30s | 15-25s |
+| 并发用户 | > 100 | 待测试 |
+
+### 7.3 安全考虑
+
+1. **API 密钥保护**：仅存储在服务端环境变量
+2. **文件上传限制**：仅允许图片格式，最大 10MB
+3. **路径遍历防护**：文件名清理，防止 `../` 攻击
+4. **CORS 配置**：生产环境限制来源域名
+5. **速率限制**：每用户每日 3 次，防止 API 滥用
 
 ---
 
 *文档版本历史*
-- v1.0 (2026-02-16): 基于现有架构创建完整技术规范
+- v1.0 (2026-02-16): 纯前端原型文档
+- v2.0 (2026-02-17): 重写为前后端分离架构，增加服务端实现细节
