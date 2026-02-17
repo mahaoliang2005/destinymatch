@@ -67,10 +67,11 @@ export const generatePartnerImage = async (
     const basePrompt = `必须生成与参考图人物生理性别完全相反的人物，单人物画面，仅 1 人出镜，画面仅包含这 1 位全新生成的异性人物，无其他任何人物，
                     彻底重构全部画面内容，生成与参考图完全不同的背景、服装、动作、光影，五官气质与参考图人物高度适配般配，有自然夫妻相，
                     生活化日常场景，自然随性穿搭，原生皮肤质感，无过度精修，面部清晰，光影自然，写实人像，真实相机拍摄效果。`;
-    const prompt = `${basePrompt}${vibePrompts[vibe]}。`;
+    const prompt = `${basePrompt}`;
 
 
     console.log('[Dreamina] Calling API with userImageUrl:', userImageUrl.substring(0, 200) + '...');
+    console.log('[Dreamina] Calling API with prompt:', prompt);
 
     try {
         const imagesResponse = await (client!.images.generate as any)({
