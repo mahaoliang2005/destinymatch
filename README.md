@@ -148,6 +148,7 @@ SILICONFLOW_API_KEY=your_key_here
 - [功能需求文档](./docs/functional-requirements.md)
 - [用户流程文档](./docs/user-flow.md)
 - [技术实现文档](./docs/technical-spec.md)
+- [生产部署文档](./docs/deployment.md)
 
 ---
 
