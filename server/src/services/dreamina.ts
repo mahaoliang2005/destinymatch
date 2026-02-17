@@ -86,7 +86,7 @@ export const generatePartnerImage = async (
             throw new Error(`API request failed: ${response.status} - ${errorText}`);
         }
 
-        const imagesResponse = await response.json();
+        const imagesResponse = await response.json() as { data?: { url: string }[] };
         console.log('[Dreamina] API response:', JSON.stringify(imagesResponse, null, 2));
 
         const imageUrl = imagesResponse.data?.[0]?.url;
