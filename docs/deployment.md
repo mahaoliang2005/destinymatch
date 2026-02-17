@@ -1,6 +1,42 @@
 # 命运匹配 (Destiny Match) 生产环境部署指南
 
-本文档详细介绍了如何将命运匹配应用部署到生产环境，使用 Nginx 作为反向代理，PM2 进行进程管理。
+本文档介绍如何将命运匹配应用部署到生产环境，使用 Nginx 作为反向代理，采用手动命令方式管理服务。
+
+---
+
+## 快速开始
+
+```bash
+# 1. 服务器准备（Ubuntu/Debian）
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs nginx
+
+# 2. 创建部署目录
+sudo mkdir -p /var/www/destiny-match
+sudo chown -R $USER:$USER /var/www/destiny-match
+cd /var/www/destiny-match
+
+# 3. 拉取代码并构建
+git clone <your-repo-url> .
+npm install
+npm run build:client
+npm run build:server
+
+# 4. 配置环境变量
+cp server/.env server/.env.production
+nano server/.env.production  # 编辑配置
+
+# 5. 上传 SSL 证书到 /etc/nginx/ssl/
+
+# 6. 配置 Nginx
+sudo nano /etc/nginx/sites-available/destiny-match
+# 粘贴配置文件（见下文），修改域名和证书路径
+sudo ln -s /etc/nginx/sites-available/destiny-match /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# 7. 启动后端服务
+cd server && export $(cat .env.production | grep -v '^#' | xargs) && nohup node dist/index.js > ../logs/app.log 2>&1 &
+```
 
 ---
 
@@ -28,26 +64,23 @@
 
 ### 1.2 软件版本要求
 
-| 软件 | 最低版本 | 推荐版本 |
-|------|----------|----------|
-| Node.js | 18.0.0 | 20.x LTS |
-| npm | 9.0.0 | 10.x |
-| Nginx | 1.18.0 | 最新稳定版 |
-| PM2 | 5.0.0 | 最新版 |
+| 软件 | 最低版本 | 推荐版本 | 说明 |
+|------|----------|----------|------|
+| Node.js | 18.0.0 | 20.x LTS | 必需 |
+| npm | 9.0.0 | 10.x | 必需 |
+| Nginx | 1.18.0 | 最新稳定版 | 必需 |
 
-### 1.3 域名和 SSL（可选但推荐）
+### 1.3 域名和 SSL 证书
 
-- 已注册的域名
-- 域名 DNS 解析到服务器 IP
-- SSL 证书（可使用 Let's Encrypt 免费证书）
+- 已注册的域名，DNS 解析到服务器 IP
+- 手工申请的 SSL 证书（如腾讯云、阿里云证书）
+- 证书文件：`.crt`（或 `.pem`）和 `.key` 格式
 
 ---
 
 ## 2. 环境准备
 
 ### 2.1 安装 Node.js
-
-**使用 NodeSource 安装（推荐）:**
 
 ```bash
 # 安装 Node.js 20.x
@@ -57,19 +90,6 @@ sudo apt-get install -y nodejs
 # 验证安装
 node -v  # v20.x.x
 npm -v   # 10.x.x
-```
-
-**或使用 NVM 安装:**
-
-```bash
-# 安装 NVM
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-source ~/.bashrc
-
-# 安装 Node.js
-nvm install 20
-nvm use 20
-nvm alias default 20
 ```
 
 ### 2.2 安装 Nginx
@@ -99,20 +119,6 @@ sudo systemctl start nginx
 sudo systemctl enable nginx
 ```
 
-### 2.3 安装 PM2
-
-```bash
-# 全局安装 PM2
-sudo npm install -g pm2
-
-# 验证安装
-pm2 -v
-
-# 设置 PM2 开机自启
-pm2 startup systemd
-# 按照提示执行生成的命令
-```
-
 ---
 
 ## 3. 项目构建
@@ -122,19 +128,19 @@ pm2 startup systemd
 ```bash
 # 创建部署目录
 sudo mkdir -p /var/www/destiny-match
-cd /var/www/destiny-match
 
 # 设置目录权限（使用当前用户部署）
 sudo chown -R $USER:$USER /var/www/destiny-match
+cd /var/www/destiny-match
 ```
 
 ### 3.2 拉取代码
 
 ```bash
-# 克隆代码仓库（根据你的实际情况修改）
+# 克隆代码仓库
 git clone https://github.com/your-username/destiny-match.git .
 
-# 或者使用 SCP/FTP 上传代码压缩包后解压
+# 或使用 SCP/FTP 上传代码压缩包后解压
 # tar -xzf destiny-match.tar.gz
 ```
 
@@ -142,10 +148,26 @@ git clone https://github.com/your-username/destiny-match.git .
 
 ```bash
 # 安装根目录、客户端和服务端依赖
-npm run install:all
+npm install
 ```
 
-### 3.4 配置环境变量
+### 3.4 构建前端
+
+```bash
+npm run build:client
+```
+
+构建输出位于 `client/dist/` 目录。
+
+### 3.5 构建后端
+
+```bash
+npm run build:server
+```
+
+构建输出位于 `server/dist/` 目录。
+
+### 3.6 配置环境变量
 
 ```bash
 # 进入服务端目录
@@ -158,18 +180,14 @@ cp .env .env.production
 nano .env.production
 ```
 
-**生产环境配置示例:**
+**生产环境配置示例：**
 
 ```bash
-# ============================================
-# 命运匹配 (Destiny Match) 生产环境配置
-# ============================================
-
 # 服务端配置
 PORT=3001
 CLIENT_URL=https://your-domain.com
 
-# AI 服务 API 密钥（必填，生产环境建议使用真实 API）
+# AI 服务 API 密钥（必填）
 # 即梦 AI - 用于生成伴侣图片
 DREAMINA_API_KEY=your_dreamina_api_key_here
 
@@ -177,29 +195,11 @@ DREAMINA_API_KEY=your_dreamina_api_key_here
 SILICONFLOW_API_KEY=your_siliconflow_api_key_here
 ```
 
-**重要提示:**
-- 将 `your-domain.com` 替换为你的实际域名
-- 填入有效的 API 密钥（生产环境不建议使用 Mock 模式）
-- 确保 `.env.production` 文件权限安全：`chmod 600 .env.production`
-
-### 3.5 构建前端
+**设置环境变量文件权限：**
 
 ```bash
-# 在根目录执行
-cd /var/www/destiny-match
-npm run build:client
+chmod 600 /var/www/destiny-match/server/.env.production
 ```
-
-构建输出位于 `client/dist/` 目录。
-
-### 3.6 构建后端
-
-```bash
-# 在根目录执行
-npm run build:server
-```
-
-构建输出位于 `server/dist/` 目录。
 
 ---
 
@@ -221,7 +221,7 @@ mkdir -p /var/www/destiny-match/logs
 ### 4.2 设置目录权限
 
 ```bash
-# 设置项目目录权限
+# 设置图片和数据目录权限
 sudo chown -R www-data:www-data /var/www/destiny-match/server/public/images
 sudo chown -R www-data:www-data /var/www/destiny-match/server/data
 
@@ -233,30 +233,52 @@ sudo chmod 755 /var/www/destiny-match/server/data
 sudo usermod -aG www-data $USER
 ```
 
-### 4.3 配置 Nginx
-
-**方法一：使用项目提供的配置文件（推荐）**
+### 4.3 上传 SSL 证书
 
 ```bash
-# 复制配置文件
-sudo cp /var/www/destiny-match/nginx.conf /etc/nginx/sites-available/destiny-match
+# 创建证书目录
+sudo mkdir -p /etc/nginx/ssl
 
-# 编辑配置文件，修改域名
+# 上传证书文件（本地终端执行）
+scp your-domain.crt root@server-ip:/etc/nginx/ssl/
+scp your-domain.key root@server-ip:/etc/nginx/ssl/
+
+# 设置权限（服务器执行）
+sudo chmod 600 /etc/nginx/ssl/*.key
+sudo chmod 644 /etc/nginx/ssl/*.crt
+```
+
+### 4.4 配置 Nginx
+
+```bash
 sudo nano /etc/nginx/sites-available/destiny-match
 ```
 
-**方法二：手动创建配置**
-
-```bash
-sudo nano /etc/nginx/sites-available/destiny-match
-```
-
-添加以下内容:
+添加以下内容：
 
 ```nginx
+# HTTP 重定向到 HTTPS
 server {
     listen 80;
-    server_name your-domain.com;  # 修改为你的域名
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS 服务
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+
+    # SSL 证书（手工上传的证书）
+    ssl_certificate /etc/nginx/ssl/your-domain.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/your-domain.com.key;
+
+    # SSL 安全配置
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
 
     # Gzip 压缩
     gzip on;
@@ -268,7 +290,7 @@ server {
     location / {
         root /var/www/destiny-match/client/dist;
         index index.html;
-        try_files $uri $uri/ /index.html;  # 支持 React Router
+        try_files $uri $uri/ /index.html;
 
         # 静态资源缓存
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
@@ -305,7 +327,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
 
         # 图片缓存 1 天
-        proxy_cache_valid 200 1d;
         expires 1d;
         add_header Cache-Control "public, immutable";
     }
@@ -318,7 +339,7 @@ server {
 }
 ```
 
-**启用站点配置:**
+**启用站点配置：**
 
 ```bash
 # 创建符号链接
@@ -334,91 +355,6 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 4.4 配置 PM2
-
-**创建 PM2 配置文件:**
-
-```bash
-nano /var/www/destiny-match/ecosystem.config.cjs
-```
-
-添加以下内容:
-
-```javascript
-module.exports = {
-  apps: [
-    {
-      name: 'destiny-match-server',
-      cwd: '/var/www/destiny-match/server',
-      script: './dist/index.js',
-      instances: 1,           // 实例数，可根据 CPU 核心数调整
-      exec_mode: 'fork',      // fork 模式（单实例）或 cluster 模式
-      env: {
-        NODE_ENV: 'production',
-      },
-      env_production: {
-        NODE_ENV: 'production',
-      },
-
-      // 日志配置
-      log_file: '/var/www/destiny-match/logs/combined.log',
-      out_file: '/var/www/destiny-match/logs/out.log',
-      error_file: '/var/www/destiny-match/logs/error.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-
-      // 自动重启配置
-      autorestart: true,
-      max_restarts: 10,
-      min_uptime: '10s',
-      restart_delay: 3000,
-
-      // 内存限制
-      max_memory_restart: '500M',
-
-      // 监控
-      watch: false,           // 生产环境不启用文件监视
-      ignore_watch: ['node_modules', 'logs', 'public/images'],
-
-      // 优雅关闭
-      kill_timeout: 5000,
-      listen_timeout: 10000,
-
-      // 合并日志
-      merge_logs: true,
-
-      // 错误处理
-      instance_var: 'INSTANCE_ID',
-    },
-  ],
-};
-```
-
-**PM2 常用命令:**
-
-```bash
-# 启动服务
-pm2 start ecosystem.config.cjs --env production
-
-# 查看状态
-pm2 status
-pm2 logs
-
-# 重启服务
-pm2 restart destiny-match-server
-
-# 停止服务
-pm2 stop destiny-match-server
-
-# 删除服务
-pm2 delete destiny-match-server
-
-# 保存 PM2 配置
-pm2 save
-
-# 设置开机自启（执行后按提示操作）
-pm2 startup
-```
-
 ---
 
 ## 5. 启动与验证
@@ -426,44 +362,31 @@ pm2 startup
 ### 5.1 启动后端服务
 
 ```bash
-cd /var/www/destiny-match
+cd /var/www/destiny-match/server
 
-# 使用 PM2 启动
-pm2 start ecosystem.config.cjs --env production
+# 加载环境变量并启动服务
+export $(cat .env.production | grep -v '^#' | xargs) && nohup node dist/index.js > ../logs/app.log 2>&1 &
 
-# 保存配置
-pm2 save
-
-# 查看运行状态
-pm2 status
+# 查看启动是否成功
+sleep 2 && ps aux | grep "node dist/index.js"
 ```
 
-### 5.2 验证 Nginx 配置
+### 5.2 验证服务状态
 
-```bash
-# 测试 Nginx 配置
-sudo nginx -t
-
-# 重载 Nginx
-sudo systemctl reload nginx
-
-# 查看 Nginx 状态
-sudo systemctl status nginx
-```
-
-### 5.3 健康检查
-
-**检查后端服务:**
+**检查后端服务：**
 
 ```bash
 # 直接访问后端
- curl http://localhost:3001/api/health
+curl http://localhost:3001/api/health
 
-# 查看 PM2 日志
-pm2 logs
+# 查看进程
+ps aux | grep "node dist/index.js"
+
+# 查看日志
+tail -f /var/www/destiny-match/logs/app.log
 ```
 
-**通过 Nginx 访问:**
+**通过 Nginx 访问：**
 
 ```bash
 # 测试前端页面
@@ -473,117 +396,64 @@ curl -I http://localhost
 curl http://localhost/api/health
 ```
 
-**浏览器验证:**
+**浏览器验证：**
 
-1. 访问 `http://your-domain.com`，应看到前端页面
-2. 打开浏览器开发者工具，检查控制台无错误
+1. 访问 `https://your-domain.com`，应看到前端页面
+2. HTTP 应自动跳转到 HTTPS
 3. 测试上传图片并生成，验证完整流程
 
 ---
 
 ## 6. 维护更新
 
-### 6.1 更新脚本
-
-创建自动化更新脚本:
+### 6.1 停止服务
 
 ```bash
-nano /var/www/destiny-match/deploy.sh
+# 停止后端服务
+pkill -f "node dist/index.js"
+
+# 确认已停止
+ps aux | grep "node dist/index.js"
 ```
 
-添加以下内容:
+### 6.2 更新流程
 
 ```bash
-#!/bin/bash
+# 1. 停止服务
+pkill -f "node dist/index.js"
 
-# 命运匹配部署脚本
-set -e
+# 2. 拉取最新代码
+cd /var/www/destiny-match
+git pull
 
-PROJECT_DIR="/var/www/destiny-match"
-BACKUP_DIR="/var/backups/destiny-match/$(date +%Y%m%d_%H%M%S)"
+# 3. 重新安装依赖（如有需要）
+npm install
 
-echo "=========================================="
-echo "开始部署 命运匹配 (Destiny Match)"
-echo "时间: $(date)"
-echo "=========================================="
-
-# 创建备份目录
-mkdir -p "$BACKUP_DIR"
-
-# 备份当前版本
-echo "[1/8] 备份当前版本..."
-cp -r "$PROJECT_DIR/server/data" "$BACKUP_DIR/" 2>/dev/null || true
-cp -r "$PROJECT_DIR/server/public/images" "$BACKUP_DIR/" 2>/dev/null || true
-cp "$PROJECT_DIR/server/.env.production" "$BACKUP_DIR/" 2>/dev/null || true
-
-# 拉取最新代码
-echo "[2/8] 拉取最新代码..."
-cd "$PROJECT_DIR"
-git pull origin main
-
-# 安装依赖
-echo "[3/8] 安装依赖..."
-npm run install:all
-
-# 构建前端
-echo "[4/8] 构建前端..."
+# 4. 重新构建
 npm run build:client
-
-# 构建后端
-echo "[5/8] 构建后端..."
 npm run build:server
 
-# 重启 PM2 服务
-echo "[6/8] 重启服务..."
-pm2 reload ecosystem.config.cjs --env production
+# 5. 启动服务
+cd server
+export $(cat .env.production | grep -v '^#' | xargs) && nohup node dist/index.js > ../logs/app.log 2>&1 &
 
-# 重载 Nginx
-echo "[7/8] 重载 Nginx..."
-sudo nginx -t && sudo systemctl reload nginx
-
-# 清理旧备份（保留最近 10 个）
-echo "[8/8] 清理旧备份..."
-ls -t /var/backups/destiny-match | tail -n +11 | xargs -I {} rm -rf /var/backups/destiny-match/{}
-
-echo "=========================================="
-echo "部署完成!"
-echo "=========================================="
-
-# 显示状态
-pm2 status
+# 6. 验证
+tail -f ../logs/app.log
 ```
 
-设置执行权限:
+### 6.3 查看日志
 
-```bash
-chmod +x /var/www/destiny-match/deploy.sh
-```
-
-使用方式:
-
-```bash
-./deploy.sh
-```
-
-### 6.2 查看日志
-
-**PM2 日志:**
+**应用日志：**
 
 ```bash
 # 实时查看日志
-pm2 logs
+tail -f /var/www/destiny-match/logs/app.log
 
 # 查看最后 100 行
-pm2 logs --lines 100
-
-# 查看特定应用日志
-pm2 logs destiny-match-server
-
-# 清空日志
-pm2 flush
+tail -n 100 /var/www/destiny-match/logs/app.log
 ```
 
-**Nginx 日志:**
+**Nginx 日志：**
 
 ```bash
 # 访问日志
@@ -593,115 +463,18 @@ sudo tail -f /var/log/nginx/access.log
 sudo tail -f /var/log/nginx/error.log
 ```
 
-**系统日志:**
+**系统日志：**
 
 ```bash
-# 查看系统日志
+# 查看 Nginx 服务日志
 sudo journalctl -u nginx -f
-
-# 查看 PM2 系统日志
-pm2 logs
-```
-
-### 6.3 备份策略
-
-**数据备份脚本:**
-
-```bash
-nano /var/www/destiny-match/backup.sh
-```
-
-```bash
-#!/bin/bash
-
-BACKUP_DIR="/var/backups/destiny-match/$(date +%Y%m%d_%H%M%S)"
-PROJECT_DIR="/var/www/destiny-match"
-
-mkdir -p "$BACKUP_DIR"
-
-# 备份使用数据
-cp -r "$PROJECT_DIR/server/data" "$BACKUP_DIR/"
-
-# 备份生成的图片（可选，可能很大）
-# cp -r "$PROJECT_DIR/server/public/images" "$BACKUP_DIR/"
-
-# 备份配置文件
-cp "$PROJECT_DIR/server/.env.production" "$BACKUP_DIR/"
-cp "$PROJECT_DIR/ecosystem.config.cjs" "$BACKUP_DIR/"
-cp -r "$PROJECT_DIR/nginx.conf" "$BACKUP_DIR/"
-
-# 压缩备份
-tar -czf "$BACKUP_DIR.tar.gz" -C "$BACKUP_DIR" .
-rm -rf "$BACKUP_DIR"
-
-# 删除 30 天前的备份
-find /var/backups/destiny-match -name "*.tar.gz" -mtime +30 -delete
-
-echo "备份完成: $BACKUP_DIR.tar.gz"
-```
-
-设置定时任务:
-
-```bash
-chmod +x /var/www/destiny-match/backup.sh
-
-# 编辑定时任务
-crontab -e
-
-# 每天凌晨 3 点自动备份
-0 3 * * * /var/www/destiny-match/backup.sh >> /var/log/destiny-match-backup.log 2>&1
 ```
 
 ---
 
 ## 7. 安全配置
 
-### 7.1 配置 HTTPS（推荐）
-
-**使用 Let's Encrypt 免费证书:**
-
-```bash
-# 安装 Certbot
-sudo apt install -y certbot python3-certbot-nginx
-
-# 获取证书（根据提示操作）
-sudo certbot --nginx -d your-domain.com
-
-# 自动续期测试
-sudo certbot renew --dry-run
-```
-
-**Certbot 会自动修改 Nginx 配置。手动配置如下:**
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    return 301 https://$server_name$request_uri;  # HTTP 重定向到 HTTPS
-}
-
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-
-    # SSL 证书
-    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-    ssl_trusted_certificate /etc/letsencrypt/live/your-domain.com/chain.pem;
-
-    # SSL 配置
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 1d;
-
-    # 其他配置与 HTTP 相同...
-    # ...
-}
-```
-
-### 7.2 防火墙设置
+### 7.1 防火墙设置
 
 ```bash
 # 安装 UFW（如未安装）
@@ -725,7 +498,7 @@ sudo ufw enable
 sudo ufw status verbose
 ```
 
-### 7.3 环境变量安全
+### 7.2 环境变量安全
 
 ```bash
 # 确保环境变量文件权限正确
@@ -734,9 +507,6 @@ chmod 600 /var/www/destiny-match/server/.env.production
 # 确保目录权限正确
 sudo chown -R www-data:www-data /var/www/destiny-match/server/public
 sudo chmod 750 /var/www/destiny-match/server/public
-
-# 禁用目录浏览
-echo "Options -Indexes" | sudo tee /var/www/destiny-match/server/public/.htaccess
 ```
 
 ---
@@ -759,14 +529,14 @@ cat /var/www/destiny-match/server/.env.production
 
 # 直接运行查看错误
 cd /var/www/destiny-match/server
-node dist/index.js
+export $(cat .env.production | grep -v '^#' | xargs) && node dist/index.js
 ```
 
 **问题 2: Nginx 返回 502 Bad Gateway**
 
 ```bash
 # 检查后端是否运行
-pm2 status
+ps aux | grep "node dist/index.js"
 curl http://localhost:3001/api/health
 
 # 检查 Nginx 错误日志
@@ -809,20 +579,19 @@ sudo chown -R www-data:www-data /var/www/destiny-match/server/public/images
 # 检查 Nginx 超时设置
 # 确保 proxy_read_timeout 足够长（60s）
 
-# 检查后端 AI 服务是否正常
-# 查看 PM2 日志了解详情
-pm2 logs
+# 检查后端日志了解详情
+tail -f /var/www/destiny-match/logs/app.log
 ```
 
 ### 8.2 性能优化
 
-**启用 Nginx 缓存:**
+**启用 Nginx 缓存：**
 
 ```nginx
-# 在 http 块中添加
+# 在 http 块中添加（/etc/nginx/nginx.conf）
 proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=destiny_cache:10m max_size=1g;
 
-# 在 location 块中使用
+# 在 location /images/ 块中使用
 location /images/ {
     proxy_cache destiny_cache;
     proxy_cache_valid 200 1d;
@@ -830,39 +599,7 @@ location /images/ {
 }
 ```
 
-**Node.js 性能优化:**
-
-```javascript
-// ecosystem.config.cjs 中使用集群模式
-module.exports = {
-  apps: [
-    {
-      name: 'destiny-match-server',
-      script: './dist/index.js',
-      instances: 'max',  // 使用所有 CPU 核心
-      exec_mode: 'cluster',
-      // ...
-    },
-  ],
-};
-```
-
-### 8.3 监控建议
-
-**基础监控:**
-
-```bash
-# 安装 htop 查看系统资源
-sudo apt install -y htop
-
-# 使用 PM2 监控
-pm2 monit
-
-# PM2 Plus（可选）
-pm2 plus
-```
-
-**日志轮转:**
+**日志轮转：**
 
 ```bash
 # 安装 logrotate
@@ -881,10 +618,6 @@ sudo nano /etc/logrotate.d/destiny-match
     missingok
     notifempty
     create 0644 www-data www-data
-    sharedscripts
-    postrotate
-        pm2 reloadLogs
-    endscript
 }
 ```
 
@@ -902,7 +635,7 @@ Nginx (80/443端口)
     └── /images/*  → 后端服务 (localhost:3001)
     │
     ▼
-PM2 管理的 Node.js 后端服务
+Node.js 后端服务（手动启动）
     ├── AI 图像生成 (即梦 API)
     └── AI 文本分析 (DeepSeek API)
 ```
@@ -917,10 +650,8 @@ PM2 管理的 Node.js 后端服务
 |--------|------|------|------|
 | PORT | 后端服务端口 | 否 | 3001 |
 | CLIENT_URL | 前端地址 | 是 | https://your-domain.com |
-| DREAMINA_API_KEY | 即梦 AI API 密钥 | 否* | xxx |
-| SILICONFLOW_API_KEY | 硅基流动 API 密钥 | 否* | xxx |
-
-* 生产环境建议配置真实 API 密钥
+| DREAMINA_API_KEY | 即梦 AI API 密钥 | 是 | xxx |
+| SILICONFLOW_API_KEY | 硅基流动 API 密钥 | 是 | xxx |
 
 ### B. 目录结构
 
@@ -934,39 +665,49 @@ PM2 管理的 Node.js 后端服务
 │   ├── public/images/     # 生成的图片存储
 │   ├── data/usage/        # 使用数据存储
 │   └── .env.production    # 生产环境配置
-├── logs/                  # PM2 日志
-├── nginx.conf             # Nginx 配置模板
-├── ecosystem.config.cjs   # PM2 配置
-├── deploy.sh              # 部署脚本
-└── backup.sh              # 备份脚本
+├── logs/
+│   └── app.log            # 应用日志
+└── nginx.conf             # Nginx 配置参考
 ```
 
-### C. 相关命令速查
+### C. 命令速查
+
+**服务管理：**
 
 ```bash
-# 部署
-npm run build
-pm2 start ecosystem.config.cjs --env production
+# 启动后端服务
+cd server && export $(cat .env.production | grep -v '^#' | xargs) && nohup node dist/index.js > ../logs/app.log 2>&1 &
 
-# 更新
-git pull
-npm run build
-pm2 reload ecosystem.config.cjs
+# 停止后端服务
+pkill -f "node dist/index.js"
+
+# 查看日志
+tail -f logs/app.log
+```
+
+**构建：**
+
+```bash
+# 安装依赖
+npm install
+
+# 构建前端
+npm run build:client
+
+# 构建后端
+npm run build:server
+```
+
+**Nginx:**
+
+```bash
+# 测试配置
+sudo nginx -t
+
+# 重载配置
+sudo systemctl reload nginx
 
 # 查看状态
-pm2 status
-pm2 logs
-pm2 monit
-
-# 停止
-pm2 stop destiny-match-server
-
-# 重启
-pm2 restart destiny-match-server
-
-# Nginx
-sudo nginx -t
-sudo systemctl reload nginx
 sudo systemctl status nginx
 ```
 
@@ -974,13 +715,15 @@ sudo systemctl status nginx
 
 ## 总结
 
-按照本文档完成部署后，你将拥有:
+按照本文档完成部署后，你将拥有：
 
-1. ✅ 使用 Nginx 作为反向代理的生产环境
-2. ✅ 使用 PM2 管理的 Node.js 后端服务
-3. ✅ 自动重启和进程守护
-4. ✅ 完整的日志管理和备份策略
-5. ✅ HTTPS 安全访问（如配置 SSL）
-6. ✅ 便捷的更新和维护脚本
+1. 使用 Nginx 作为反向代理的生产环境
+2. 手动管理的 Node.js 后端服务
+3. HTTPS 安全访问
+4. 手工 SSL 证书配置
 
-如需帮助，请参考项目文档或联系开发团队。
+**注意事项：**
+
+- 服务器重启后需手动重新启动后端服务
+- 建议配置日志轮转防止日志文件过大
+- 定期检查 SSL 证书有效期并及时更新
