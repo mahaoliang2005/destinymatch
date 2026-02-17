@@ -1,17 +1,11 @@
-import OpenAI from 'openai';
 import { PartnerVibe } from '../types/index.js';
 import { fetchImageAsBuffer, FetchedImage } from './imageProxy.js';
 
 const ARK_API_KEY = process.env.DREAMINA_API_KEY;
+const API_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
 
 // Check if using mock mode (no valid API Key configured)
 const USE_MOCK = !ARK_API_KEY || ARK_API_KEY.includes('your_') || ARK_API_KEY.includes('test');
-
-// Initialize Ark client (only in non-mock mode)
-const client = USE_MOCK ? null : new OpenAI({
-    baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-    apiKey: ARK_API_KEY,
-});
 
 /**
  * Mock partner photo URLs (based on vibe)
@@ -64,26 +58,38 @@ export const generatePartnerImage = async (
         }
     }
 
-    const basePrompt = `必须生成与参考图人物生理性别完全相反的人物，单人物画面，仅 1 人出镜，画面仅包含这 1 位全新生成的异性人物，无其他任何人物，彻底重构全部画面内容，生成与参考图完全不同的背景、服装、动作、光影，五官气质与参考图人物高度适配般配，有自然夫妻相，生活化日常场景，自然随性穿搭，原生皮肤质感，无过度精修，面部清晰，光影自然，写实人像，真实相机拍摄效果。`;
-    const prompt = `${basePrompt}`;
-
+    const prompt = `必须生成与参考图人物生理性别完全相反的人物，单人物画面，仅 1 人出镜，画面仅包含这 1 位全新生成的异性人物，无其他任何人物，彻底重构全部画面内容，生成与参考图完全不同的背景、服装、动作、光影，五官气质与参考图人物高度适配般配，有自然夫妻相，生活化日常场景，自然随性穿搭，原生皮肤质感，无过度精修，面部清晰，光影自然，写实人像，真实相机拍摄效果。`;
 
     console.log('[Dreamina] Calling API with userImageUrl:', userImageUrl.substring(0, 200) + '...');
 
     try {
-        const imagesResponse = await (client!.images.generate as any)({
-            model: 'ep-20260106225752-q46qg',
-            prompt: '必须生成与参考图人物生理性别完全相反的人物，单人物画面，仅 1 人出镜，画面仅包含这 1 位全新生成的异性人物，无其他任何人物，彻底重构全部画面内容，生成与参考图完全不同的背景、服装、动作、光影，五官气质与参考图人物高度适配般配，有自然夫妻相，生活化日常场景，自然随性穿搭，原生皮肤质感，无过度精修，面部清晰，光影自然，写实人像，真实相机拍摄效果。',
-            size: '1K',
-            response_format: 'url',
-            extra_body: {
+        const response = await fetch(`${API_BASE_URL}/images/generations`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${ARK_API_KEY}`,
+            },
+            body: JSON.stringify({
+                model: 'ep-20260106225752-q46qg',
+                prompt: prompt,
                 image: userImageUrl,
+                sequential_image_generation: 'disabled',
+                response_format: 'url',
+                size: '1K',
+                stream: false,
                 watermark: false,
-                sequential_image_generation: 'disabled'
-            }
+            }),
         });
 
-        const imageUrl = imagesResponse.data[0]?.url;
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API request failed: ${response.status} - ${errorText}`);
+        }
+
+        const imagesResponse = await response.json();
+        console.log('[Dreamina] API response:', JSON.stringify(imagesResponse, null, 2));
+
+        const imageUrl = imagesResponse.data?.[0]?.url;
 
         if (!imageUrl) {
             throw new Error('Image generation failed: no valid image URL returned');
