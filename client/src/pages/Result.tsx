@@ -116,15 +116,23 @@ const Result: React.FC<ResultProps> = ({ result, userImage, vibe, onRestart }) =
             return;
         }
 
+        // Check if images are ready (base64 data loaded)
+        if (!userImageBase64 || !partnerImageBase64) {
+            console.log('[Share] Images not ready yet, waiting for base64 conversion...');
+            showToastMessage('图片准备中，请稍后再试');
+            return;
+        }
+
         setIsGenerating(true);
         try {
-            console.log('Starting share card generation...');
+            console.log('[Share] Starting share card generation...');
+            console.log('[Share] User image ready:', !!userImageBase64, 'Partner image ready:', !!partnerImageBase64);
             const dataUrl = await generateShareCard(cardRef.current);
-            console.log('Share card generated, downloading...');
+            console.log('[Share] Share card generated, downloading...');
             downloadImage(dataUrl, `DestinyMatch_${result.score}_${Date.now()}.png`);
             showToastMessage(isMobile() ? '长按图片保存到相册' : '图片已保存');
         } catch (error) {
-            console.error('Download failed:', error);
+            console.error('[Share] Download failed:', error);
             showToastMessage(`生成失败：${error instanceof Error ? error.message : '请重试'}`);
         } finally {
             setIsGenerating(false);

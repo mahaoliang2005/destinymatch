@@ -3,15 +3,48 @@ import QRCode from 'qrcode';
 import { PartnerVibe } from '../types';
 
 // Wait for all images in element to load
-// Note: Images are now base64 from backend, so they load instantly
+// Note: Images should be base64 for reliable rendering
 const waitForImages = (element: HTMLElement): Promise<void> => {
   const images = element.querySelectorAll('img');
   const promises = Array.from(images).map((img) => {
+    // Check if image has valid src (not empty, not just placeholder)
+    const src = img.getAttribute('src') || '';
+    if (!src || src === 'undefined' || src === 'null' || src === '') {
+      console.warn('[Share] Image has empty src, waiting for data...');
+      // Wait for src to be set with a polling approach
+      return new Promise<void>((resolve) => {
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max
+        const checkInterval = setInterval(() => {
+          const currentSrc = img.getAttribute('src') || '';
+          attempts++;
+          if (currentSrc && currentSrc !== 'undefined' && currentSrc !== 'null' && currentSrc !== '') {
+            clearInterval(checkInterval);
+            // Now wait for the actual image to load
+            if (img.complete) {
+              resolve();
+            } else {
+              img.onload = () => resolve();
+              img.onerror = () => {
+                console.warn(`[Share] Image failed to load: ${currentSrc.substring(0, 50)}...`);
+                resolve();
+              };
+            }
+          } else if (attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            console.error('[Share] Timeout waiting for image src');
+            resolve();
+          }
+        }, 100);
+      });
+    }
+
     if (img.complete) return Promise.resolve();
+
     return new Promise<void>((resolve) => {
       img.onload = () => resolve();
       img.onerror = () => {
-        console.warn(`[Share] Image failed to load: ${img.src.substring(0, 50)}...`);
+        console.warn(`[Share] Image failed to load: ${src.substring(0, 50)}...`);
         resolve();
       };
       setTimeout(() => resolve(), 1000);
