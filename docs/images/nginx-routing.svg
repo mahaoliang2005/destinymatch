@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520">
+  <!-- Background -->
+  <rect width="900" height="520" fill="#f8f9fa"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#333">🔄 Nginx 路由判断流程</text>
+
+  <!-- Request Examples Box -->
+  <rect x="40" y="60" width="180" height="200" rx="8" fill="#e3f2fd" stroke="#1976d2" stroke-width="2"/>
+  <text x="130" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#0d47a1">用户请求示例</text>
+
+  <!-- URL Examples -->
+  <rect x="55" y="105" width="150" height="35" rx="4" fill="#fff" stroke="#1976d2" stroke-width="1"/>
+  <text x="130" y="128" text-anchor="middle" font-family="Arial, monospace" font-size="11" fill="#333">https://...tech/</text>
+
+  <rect x="55" y="150" width="150" height="35" rx="4" fill="#fff" stroke="#1976d2" stroke-width="1"/>
+  <text x="130" y="173" text-anchor="middle" font-family="Arial, monospace" font-size="11" fill="#333">/api/generate</text>
+
+  <rect x="55" y="195" width="150" height="35" rx="4" fill="#fff" stroke="#1976d2" stroke-width="1"/>
+  <text x="130" y="218" text-anchor="middle" font-family="Arial, monospace" font-size="11" fill="#333">/images/xxx.jpg</text>
+
+  <!-- Nginx Decision Flow -->
+  <rect x="260" y="60" width="380" height="400" rx="8" fill="#c8e6c9" stroke="#4caf50" stroke-width="2"/>
+  <text x="450" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2e7d32">Nginx 路由判断</text>
+
+  <!-- Check 1: /api/ -->
+  <polygon points="450,120 520,155 450,190 380,155" fill="#fff3e0" stroke="#ff9800" stroke-width="2"/>
+  <text x="450" y="150" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#333">匹配</text>
+  <text x="450" y="165" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#333">/api/ ?</text>
+
+  <!-- Check 2: /images/ -->
+  <polygon points="450,220 520,255 450,290 380,255" fill="#fff3e0" stroke="#ff9800" stroke-width="2"/>
+  <text x="450" y="250" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#333">匹配</text>
+  <text x="450" y="265" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#333">/images/ ?</text>
+
+  <!-- Check 3: Static file exists -->
+  <polygon points="450,320 520,355 450,390 380,355" fill="#fff3e0" stroke="#ff9800" stroke-width="2"/>
+  <text x="450" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">静态文件</text>
+  <text x="450" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">存在?</text>
+
+  <!-- API Result -->
+  <rect x="550" y="135" width="130" height="40" rx="4" fill="#e1f5fe" stroke="#03a9f4" stroke-width="1.5"/>
+  <text x="615" y="155" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">✅ proxy_pass</text>
+  <text x="615" y="170" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">localhost:3001</text>
+
+  <!-- Image Result -->
+  <rect x="550" y="235" width="130" height="40" rx="4" fill="#e1f5fe" stroke="#03a9f4" stroke-width="1.5"/>
+  <text x="615" y="255" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">✅ proxy_pass</text>
+  <text x="615" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">localhost:3001/images</text>
+
+  <!-- Static File Result -->
+  <rect x="550" y="330" width="130" height="35" rx="4" fill="#fff9c4" stroke="#fbc02d" stroke-width="1.5"/>
+  <text x="615" y="352" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">✅ 返回静态文件</text>
+
+  <!-- Index Result -->
+  <rect x="550" y="380" width="130" height="35" rx="4" fill="#fff9c4" stroke="#fbc02d" stroke-width="1.5"/>
+  <text x="615" y="402" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">✅ 返回 index.html</text>
+
+  <!-- No labels -->
+  <text x="400" y="240" font-family="Arial, sans-serif" font-size="10" fill="#d84315">否</text>
+  <text x="400" y="340" font-family="Arial, sans-serif" font-size="10" fill="#d84315">否</text>
+  <text x="495" y="340" font-family="Arial, sans-serif" font-size="10" fill="#4caf50">是</text>
+  <text x="495" y="405" font-family="Arial, sans-serif" font-size="10" fill="#d84315">否</text>
+  <text x="495" y="250" font-family="Arial, sans-serif" font-size="10" fill="#4caf50">是</text>
+  <text x="495" y="155" font-family="Arial, sans-serif" font-size="10" fill="#4caf50">是</text>
+
+  <!-- Backend Box -->
+  <rect x="720" y="110" width="140" height="100" rx="8" fill="#ffe0b2" stroke="#ff9800" stroke-width="2"/>
+  <text x="790" y="140" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#e65100">后端服务</text>
+  <rect x="735" y="155" width="110" height="45" rx="4" fill="#fff" stroke="#ff9800" stroke-width="1"/>
+  <text x="790" y="175" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">Node.js :3001</text>
+  <text x="790" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">处理 API/图片</text>
+
+  <!-- Files Box -->
+  <rect x="720" y="280" width="140" height="100" rx="8" fill="#fce4ec" stroke="#e91e63" stroke-width="2"/>
+  <text x="790" y="310" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#c2185b">文件系统</text>
+
+  <rect x="735" y="325" width="110" height="20" rx="3" fill="#fff" stroke="#e91e63" stroke-width="1"/>
+  <text x="790" y="339" text-anchor="middle" font-family="Arial, monospace" font-size="9" fill="#333">index.html</text>
+
+  <rect x="735" y="350" width="110" height="20" rx="3" fill="#fff" stroke="#e91e63" stroke-width="1"/>
+  <text x="790" y="364" text-anchor="middle" font-family="Arial, monospace" font-size="9" fill="#333">static/*</text>
+
+  <!-- Arrows -->
+  <!-- URL to Check1 -->
+  <line x1="205" y1="122" x2="260" y2="140" stroke="#1976d2" stroke-width="2" marker-end="url(#arrowblue)"/>
+  <line x1="205" y1="167" x2="260" y2="160" stroke="#1976d2" stroke-width="2" marker-end="url(#arrowblue)"/>
+  <line x1="205" y1="212" x2="260" y2="180" stroke="#1976d2" stroke-width="2" marker-end="url(#arrowblue)"/>
+
+  <!-- Check1 to API -->
+  <line x1="520" y1="155" x2="550" y2="155" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowgreen)"/>
+  <line x1="680" y1="155" x2="720" y2="150" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowgreen)"/>
+
+  <!-- Check1 to Check2 -->
+  <line x1="450" y1="190" x2="450" y2="220" stroke="#d84315" stroke-width="1.5"/>
+
+  <!-- Check2 to Image -->
+  <line x1="520" y1="255" x2="550" y2="255" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowgreen)"/>
+  <line x1="680" y1="255" x2="720" y2="170" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowgreen)"/>
+
+  <!-- Check2 to Check3 -->
+  <line x1="450" y1="290" x2="450" y2="320" stroke="#d84315" stroke-width="1.5"/>
+
+  <!-- Check3 branches -->
+  <line x1="520" y1="355" x2="550" y2="347" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowgreen)"/>
+  <line x1="680" y1="347" x2="720" y2="360" stroke="#4caf50" stroke-width="2" marker-end="url(#arrowgreen)"/>
+
+  <line x1="450" y1="390" x2="450" y2="415" stroke="#d84315" stroke-width="1.5"/>
+  <line x1="450" y1="415" x2="535" y2="415" stroke="#d84315" stroke-width="1.5"/>
+  <line x1="535" y1="397" x2="550" y2="397" stroke="#d84315" stroke-width="1.5" marker-end="url(#arrowred)"/>
+  <line x1="680" y1="397" x2="720" y2="380" stroke="#d84315" stroke-width="1.5" marker-end="url(#arrowred)"/>
+
+  <!-- Routing Table -->
+  <rect x="40" y="290" width="180" height="200" rx="8" fill="#e8eaf6" stroke="#3f51b5" stroke-width="2"/>
+  <text x="130" y="315" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#283593">路由匹配规则</text>
+
+  <text x="55" y="345" font-family="Arial, sans-serif" font-size="11" fill="#333">URL → 匹配规则 → 处理</text>
+
+  <rect x="55" y="360" width="150" height="30" rx="3" fill="#fff" stroke="#3f51b5" stroke-width="1"/>
+  <text x="130" y="380" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#333">/ → 返回 index.html</text>
+
+  <rect x="55" y="395" width="150" height="30" rx="3" fill="#fff" stroke="#3f51b5" stroke-width="1"/>
+  <text x="130" y="415" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#333">/api/* → 转发 :3001</text>
+
+  <rect x="55" y="430" width="150" height="30" rx="3" fill="#fff" stroke="#3f51b5" stroke-width="1"/>
+  <text x="130" y="450" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#333">/images/* → 转发 :3001</text>
+
+  <rect x="55" y="465" width="150" height="15" rx="3" fill="#fff3e0" stroke="#ff9800" stroke-width="1"/>
+  <text x="130" y="476" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#666">try_files $uri ... /index.html</text>
+
+  <!-- Explanation Box -->
+  <rect x="260" y="480" width="600" height="30" rx="4" fill="#fff3e0" stroke="#ff9800" stroke-width="1"/>
+  <text x="560" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#333">💡 为什么需要 try_files? 单页应用(SPA)的路由由前端处理，直接访问 /result/123 时需要返回 index.html 让 React Router 接管</text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowblue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#1976d2"/>
+    </marker>
+    <marker id="arrowgreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#4caf50"/>
+    </marker>
+    <marker id="arrowred" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#d84315"/>
+    </marker>
+  </defs>
+</svg>

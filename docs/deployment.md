@@ -12,9 +12,9 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs nginx
 
 # 2. 创建部署目录
-sudo mkdir -p /var/www/destiny-match
-sudo chown -R $USER:$USER /var/www/destiny-match
-cd /var/www/destiny-match
+sudo mkdir -p /home/ubuntu/works/destinymatch
+sudo chown -R $USER:$USER /home/ubuntu/works/destinymatch
+cd /home/ubuntu/works/destinymatch
 
 # 3. 拉取代码并构建
 git clone <your-repo-url> .
@@ -119,6 +119,28 @@ sudo systemctl start nginx
 sudo systemctl enable nginx
 ```
 
+### 2.3 理解 Nginx 用户配置（重要）
+
+Nginx 有两个层面的用户概念：
+
+1. **Nginx master 进程**：以 `root` 运行（启动时绑定 80/443 端口需要 root 权限）
+2. **Nginx worker 进程**：实际处理请求的子进程，以配置文件中 `user` 指令指定的用户运行
+
+**查看你的 Nginx 配置**：
+```bash
+cat /etc/nginx/nginx.conf | grep user
+```
+
+你的配置显示 `user ubuntu;`，这意味着：
+- Nginx worker 进程以 `ubuntu` 用户身份运行
+- Nginx 需要读取的文件（如前端静态文件）必须对 `ubuntu` 用户可读
+- 在你的环境中，由于你用 `ubuntu` 用户部署，且后端也以 `ubuntu` 运行，**所有文件归 ubuntu 所有即可**
+
+**对比：默认安装的 Nginx**
+- 默认配置通常是 `user www-data;`（Ubuntu/Debian）或 `user nginx;`（CentOS）
+- 这时需要确保文件对 `www-data` 用户可读
+- 你的环境使用 `user ubuntu;`，权限管理更简单
+
 ---
 
 ## 3. 项目构建
@@ -127,11 +149,11 @@ sudo systemctl enable nginx
 
 ```bash
 # 创建部署目录
-sudo mkdir -p /var/www/destiny-match
+sudo mkdir -p /home/ubuntu/works/destinymatch
 
 # 设置目录权限（使用当前用户部署）
-sudo chown -R $USER:$USER /var/www/destiny-match
-cd /var/www/destiny-match
+sudo chown -R $USER:$USER /home/ubuntu/works/destinymatch
+cd /home/ubuntu/works/destinymatch
 ```
 
 ### 3.2 拉取代码
@@ -198,7 +220,7 @@ SILICONFLOW_API_KEY=your_siliconflow_api_key_here
 **设置环境变量文件权限：**
 
 ```bash
-chmod 600 /var/www/destiny-match/server/.env.production
+chmod 600 /home/ubuntu/works/destinymatch/server/.env.production
 ```
 
 ---
@@ -209,28 +231,54 @@ chmod 600 /var/www/destiny-match/server/.env.production
 
 ```bash
 # 创建图片存储目录
-mkdir -p /var/www/destiny-match/server/public/images
+mkdir -p /home/ubuntu/works/destinymatch/server/public/images
 
 # 创建数据目录
-mkdir -p /var/www/destiny-match/server/data/usage
+mkdir -p /home/ubuntu/works/destinymatch/server/data/usage
 
 # 创建日志目录
-mkdir -p /var/www/destiny-match/logs
+mkdir -p /home/ubuntu/works/destinymatch/logs
 ```
 
 ### 4.2 设置目录权限
 
+> **关于权限的基础知识**：Nginx 需要读取前端静态文件，后端 Node.js 需要写入图片和数据。理解「哪个用户运行哪个服务」是关键。
+
+**你的环境特点**：
+- 你用 `ubuntu` 用户登录并部署项目
+- Nginx 配置为 `user ubuntu;`（运行 Nginx worker 进程的用户）
+- Node.js 后端由你手动启动，也以 `ubuntu` 用户运行
+
+**因此权限设置很简单**——所有文件归 `ubuntu` 用户所有即可：
+
 ```bash
-# 设置图片和数据目录权限
-sudo chown -R www-data:www-data /var/www/destiny-match/server/public/images
-sudo chown -R www-data:www-data /var/www/destiny-match/server/data
+# 确保项目目录归 ubuntu 用户所有（前面已设置，这里再确认）
+sudo chown -R ubuntu:ubuntu /home/ubuntu/works/destinymatch
 
-# 设置目录权限
-sudo chmod 755 /var/www/destiny-match/server/public/images
-sudo chmod 755 /var/www/destiny-match/server/data
+# 设置可写目录的权限（755 = 所有者读写执行，组和其他人读执行）
+chmod 755 /home/ubuntu/works/destinymatch/server/public/images
+chmod 755 /home/ubuntu/works/destinymatch/server/data
+chmod 755 /home/ubuntu/works/destinymatch/logs
+```
 
-# 确保当前用户有写入权限
-sudo usermod -aG www-data $USER
+**为什么需要这些权限？**
+
+| 目录 | 需要权限的用户 | 操作 | 说明 |
+|------|---------------|------|------|
+| `client/dist/` | Nginx (ubuntu) | 读取 | 前端页面和静态资源 |
+| `server/public/images/` | Node.js (ubuntu) | 写入 | 保存生成的图片 |
+| `server/data/usage/` | Node.js (ubuntu) | 写入 | 保存使用统计数据 |
+| `logs/` | Node.js (ubuntu) | 写入 | 保存应用日志 |
+
+**权限数字解释**：
+- `755` = `rwxr-xr-x`（所有者可读可写可执行，其他人只读可执行）
+- `600` = `rw-------`（只有所有者可读写，用于保护密钥文件）
+
+**检查权限是否正确的命令**：
+```bash
+# 查看文件所有者
+ls -la /home/ubuntu/works/destinymatch/server/public/images
+# 应该显示：drwxr-xr-x ubuntu ubuntu ...
 ```
 
 ### 4.3 上传 SSL 证书
@@ -260,18 +308,18 @@ sudo nano /etc/nginx/sites-available/destiny-match
 # HTTP 重定向到 HTTPS
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name destiny.mahaoliang.tech;
     return 301 https://$server_name$request_uri;
 }
 
 # HTTPS 服务
 server {
     listen 443 ssl;
-    server_name your-domain.com;
+    server_name destiny.mahaoliang.tech;
 
-    # SSL 证书（手工上传的证书）
-    ssl_certificate /etc/nginx/ssl/your-domain.com.crt;
-    ssl_certificate_key /etc/nginx/ssl/your-domain.com.key;
+    # SSL 证书（实际生产环境证书路径）
+    ssl_certificate /etc/nginx/ssl/destiny.mahaoliang.tech.crt;
+    ssl_certificate_key /etc/nginx/ssl/destiny.mahaoliang.tech.key;
 
     # SSL 安全配置
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -288,7 +336,7 @@ server {
 
     # 前端静态文件
     location / {
-        root /var/www/destiny-match/client/dist;
+        root /home/ubuntu/works/destinymatch/client/dist;
         index index.html;
         try_files $uri $uri/ /index.html;
 
@@ -362,7 +410,7 @@ sudo systemctl reload nginx
 ### 5.1 启动后端服务
 
 ```bash
-cd /var/www/destiny-match/server
+cd /home/ubuntu/works/destinymatch/server
 
 # 加载环境变量并启动服务
 export $(cat .env.production | grep -v '^#' | xargs) && nohup node dist/index.js > ../logs/app.log 2>&1 &
@@ -383,7 +431,7 @@ curl http://localhost:3001/api/health
 ps aux | grep "node dist/index.js"
 
 # 查看日志
-tail -f /var/www/destiny-match/logs/app.log
+tail -f /home/ubuntu/works/destinymatch/logs/app.log
 ```
 
 **通过 Nginx 访问：**
@@ -423,7 +471,7 @@ ps aux | grep "node dist/index.js"
 pkill -f "node dist/index.js"
 
 # 2. 拉取最新代码
-cd /var/www/destiny-match
+cd /home/ubuntu/works/destinymatch
 git pull
 
 # 3. 重新安装依赖（如有需要）
@@ -447,10 +495,10 @@ tail -f ../logs/app.log
 
 ```bash
 # 实时查看日志
-tail -f /var/www/destiny-match/logs/app.log
+tail -f /home/ubuntu/works/destinymatch/logs/app.log
 
 # 查看最后 100 行
-tail -n 100 /var/www/destiny-match/logs/app.log
+tail -n 100 /home/ubuntu/works/destinymatch/logs/app.log
 ```
 
 **Nginx 日志：**
@@ -501,12 +549,12 @@ sudo ufw status verbose
 ### 7.2 环境变量安全
 
 ```bash
-# 确保环境变量文件权限正确
-chmod 600 /var/www/destiny-match/server/.env.production
+# 确保环境变量文件只有 ubuntu 用户可读（防止其他用户看到 API 密钥）
+chmod 600 /home/ubuntu/works/destinymatch/server/.env.production
 
-# 确保目录权限正确
-sudo chown -R www-data:www-data /var/www/destiny-match/server/public
-sudo chmod 750 /var/www/destiny-match/server/public
+# 验证权限
+ls -la /home/ubuntu/works/destinymatch/server/.env.production
+# 应该显示：-rw------- ubuntu ubuntu .env.production
 ```
 
 ---
@@ -525,10 +573,10 @@ sudo lsof -i :3001
 sudo kill -9 <PID>
 
 # 检查环境变量
-cat /var/www/destiny-match/server/.env.production
+cat /home/ubuntu/works/destinymatch/server/.env.production
 
 # 直接运行查看错误
-cd /var/www/destiny-match/server
+cd /home/ubuntu/works/destinymatch/server
 export $(cat .env.production | grep -v '^#' | xargs) && node dist/index.js
 ```
 
@@ -550,24 +598,24 @@ sudo setsebool -P httpd_can_network_connect 1
 
 ```bash
 # 检查前端文件是否存在
-ls -la /var/www/destiny-match/client/dist/
+ls -la /home/ubuntu/works/destinymatch/client/dist/
 
 # 检查 Nginx 配置路径
 sudo nginx -t
 
 # 检查目录权限
-ls -la /var/www/destiny-match/client/
+ls -la /home/ubuntu/works/destinymatch/client/
 ```
 
 **问题 4: 图片上传失败**
 
 ```bash
 # 检查目录权限
-ls -la /var/www/destiny-match/server/public/images
+ls -la /home/ubuntu/works/destinymatch/server/public/images
 
-# 确保目录可写
-sudo chmod 755 /var/www/destiny-match/server/public/images
-sudo chown -R www-data:www-data /var/www/destiny-match/server/public/images
+# 确保目录归 ubuntu 所有且有写入权限
+chmod 755 /home/ubuntu/works/destinymatch/server/public/images
+chown -R ubuntu:ubuntu /home/ubuntu/works/destinymatch/server/public/images
 
 # 检查 Nginx 上传限制
 # 确保 client_max_body_size 设置足够大（10M）
@@ -580,7 +628,7 @@ sudo chown -R www-data:www-data /var/www/destiny-match/server/public/images
 # 确保 proxy_read_timeout 足够长（60s）
 
 # 检查后端日志了解详情
-tail -f /var/www/destiny-match/logs/app.log
+tail -f /home/ubuntu/works/destinymatch/logs/app.log
 ```
 
 ### 8.2 性能优化
@@ -610,14 +658,14 @@ sudo nano /etc/logrotate.d/destiny-match
 ```
 
 ```
-/var/www/destiny-match/logs/*.log {
+/home/ubuntu/works/destinymatch/logs/*.log {
     daily
     rotate 14
     compress
     delaycompress
     missingok
     notifempty
-    create 0644 www-data www-data
+    create 0644 ubuntu ubuntu
 }
 ```
 
@@ -656,7 +704,7 @@ Node.js 后端服务（手动启动）
 ### B. 目录结构
 
 ```
-/var/www/destiny-match/
+/home/ubuntu/works/destinymatch/
 ├── client/
 │   ├── dist/              # 前端构建输出
 │   └── ...

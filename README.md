@@ -149,6 +149,7 @@ SILICONFLOW_API_KEY=your_key_here
 - [用户流程文档](./docs/user-flow.md)
 - [技术实现文档](./docs/technical-spec.md)
 - [生产部署文档](./docs/deployment.md)
+- [运维快捷参考](./docs/quick-reference.md) - 日常开发和运维命令速查
 
 ---
 
